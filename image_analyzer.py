@@ -198,10 +198,20 @@ class ClothingAnalyzer:
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406],[0.229,0.224,0.225])
             ])
-            print("Clothing classifier model loaded successfully")
+            print("MobileNet-v2 classifier loaded successfully")
         except Exception as e:
-            print(f"Error loading clothing classifier model: {str(e)}")
+            print(f"Error loading MobileNet-v2: {str(e)}")
             self.clothing_classifier = None
+
+        # Initialize ResNet50 for additional classification
+        try:
+            self.resnet_classifier = models.resnet50(pretrained=True).eval()
+            # Use the same transform as MobileNet-v2 here
+            self.resnet_transform = self.classify_transform
+            print("ResNet50 classifier loaded successfully")
+        except Exception as e:
+            print(f"Error loading ResNet50: {str(e)}")
+            self.resnet_classifier = None
     
     def _get_random_color(self):
         """Return a random color from the color list instead of 'unknown'"""
@@ -1388,76 +1398,134 @@ class ClothingAnalyzer:
         return position
 
     def _detect_clothing_type_advanced(self, img, description=None, segments_info=None):
-        """
-        Enhanced method to detect clothing type by combining image analysis,
-        description analysis, segmentation information, and a compact classifier.
-        """
         try:
-            # Use the new classifier model
-            classifier_type = self._classify_clothing_model(img)
-            if classifier_type != "unknown":
-                detected_type = classifier_type
-            else:
-                detected_type = None
-
-            # Use description-based rules as fallback
-            if description:
-                description = description.lower()
-                if any(keyword in description for keyword in ['pants', 'jeans', 'trousers', 'shorts', 'leggings']):
-                    detected_type = 'pants'
-                elif any(keyword in description for keyword in ['skirt']):
-                    detected_type = 'skirt'
-                elif any(keyword in description for keyword in ['dress', 'gown']):
-                    detected_type = 'dress'
-                elif any(keyword in description for keyword in ['shirt', 'blouse', 't-shirt', 'top', 'tee']):
-                    detected_type = 'top'
-                elif any(keyword in description for keyword in ['saree', 'sari']):
-                    detected_type = 'saree'
-                elif any(keyword in description for keyword in ['kurta', 'kurti', 'salwar']):
-                    detected_type = 'kurta'
-                elif any(keyword in description for keyword in ['lehenga', 'ghagra']):
-                    detected_type = 'lehenga'
+            # First, try the specialized pants vs dress classifier
+            pants_dress_decision = self._determine_pants_vs_dress(img, segments_info)
+            if pants_dress_decision:
+                return pants_dress_decision
             
-            # Use segmentation geometry as additional check if still undetermined
-            if not detected_type:
-                height, width = img.shape[:2]
-                aspect_ratio = height / width
-                if aspect_ratio > 1.8:
-                    detected_type = 'pants'
-                elif aspect_ratio < 0.8:
-                    detected_type = 'top'
-                else:
-                    detected_type = 'dress'
+            scores = {}
+            # Weight definitions
+            weight_classifier = 3
+            weight_aspect = 2
+            weight_desc = 4
+            weight_segm = 1
+            
+            # 1. Ensemble classifier signal
+            clf_type = self._classify_clothing_model(img)
+            if clf_type and clf_type != "unknown":
+                scores[clf_type] = scores.get(clf_type, 0) + weight_classifier
+            
+            # 2. Description-based classification with highest weight
+            if description:
+                desc = description.lower()
+                # Check for strongest keywords first
+                if any(k in desc for k in ['pants', 'jeans', 'trousers', 'slacks']):
+                    scores['pants'] = scores.get('pants', 0) + weight_desc * 1.5
+                elif any(k in desc for k in ['dress', 'gown']):
+                    scores['dress'] = scores.get('dress', 0) + weight_desc
+                elif "skirt" in desc:
+                    scores['skirt'] = scores.get('skirt', 0) + weight_desc
+                elif any(k in desc for k in ['shirt', 'blouse', 't-shirt', 'top', 'tee']):
+                    scores['top'] = scores.get('top', 0) + weight_desc
+                elif any(k in desc for k in ['saree', 'sari']):
+                    scores['saree'] = scores.get('saree', 0) + weight_desc
+                elif any(k in desc for k in ['kurta', 'kurti', 'salwar']):
+                    scores['kurta'] = scores.get('kurta', 0) + weight_desc
+                elif any(k in desc for k in ['lehenga', 'ghagra']):
+                    scores['lehenga'] = scores.get('lehenga', 0) + weight_desc
+                # Check for "fan" and return immediately
+                if "fan" in desc:
+                    return "fan"
+            
+            # 3. Aspect ratio signal from image geometry
+            height, width = img.shape[:2]
+            aspect = height / float(width) if width > 0 else 1
+            if aspect > 2.0:
+                scores['pants'] = scores.get('pants', 0) + weight_aspect * 1.5  # Extra weight for pants
+            elif aspect < 0.8:  # Extra check for tops
+                scores['top'] = scores.get('top', 0) + weight_aspect
+            elif aspect < 1.5:  # More conservative threshold for dresses
+                scores['dress'] = scores.get('dress', 0) + (weight_aspect * 0.7)  # Less weight
+            
+            # 4. Segmentation refinement based on bounding box aspect ratio
+            if segments_info and segments_info.get('main_body'):
+                x, y, w, h = segments_info['main_body']['bbox']
+                seg_aspect = h / float(w) if w > 0 else 1
+                if seg_aspect > 2.0:
+                    scores['pants'] = scores.get('pants', 0) + weight_segm * 1.5  # Extra weight
+            
+            if scores:
+                # Check special cases first - give extra boost to pants if strong indicators
+                if 'pants' in scores and aspect > 2.0:
+                    scores['pants'] += 2  # Extra bonus
 
-            return detected_type
+                # Pick candidate with the highest weighted score
+                detected_type = max(scores.items(), key=lambda item: item[1])[0]
+                return detected_type
+            else:
+                # Default based on aspect ratio
+                if aspect > 2.0:
+                    return 'pants'
+                elif aspect < 1.0:
+                    return 'top'
+                else:
+                    return 'dress'
+                    
         except Exception as e:
             print(f"Error in _detect_clothing_type_advanced: {str(e)}")
-            return 'top'
+            return 'top'  # Safe default
 
     # New method to classify clothing type using the compact model
     def _classify_clothing_model(self, img):
         """
-        Use MobileNet-v2 to predict clothing type and map ImageNet labels to common types.
+        Use MobileNet-v2 and ResNet50 in an ensemble to predict clothing type.
+        A simple voting mechanism is applied using small mapping dictionaries.
         """
-        if self.clothing_classifier is None:
-            return "unknown"
-        try:
-            input_tensor = self.classify_transform(img).unsqueeze(0)
-            with torch.no_grad():
-                output = self.clothing_classifier(input_tensor)
-            pred = torch.argmax(output, dim=1).item()
-            # A small mapping from some ImageNet indices to clothing types (for demonstration)
-            mapping = {
-                924: 'trouser',    # approximate for jeans/trousers
-                207: 'suit',       # for business attire
-                867: 'shirt',      # example value
-                435: 'dress',      # example value
-                609: 'shorts',     # example value
-            }
-            return mapping.get(pred, "top")
-        except Exception as e:
-            print(f"Error in _classify_clothing_model: {str(e)}")
-            return "unknown"
+        predictions = []
+        mapping_mobile = {
+            924: 'trouser',    # approximate for jeans/trousers
+            207: 'suit',
+            867: 'shirt',
+            435: 'dress',
+            609: 'shorts'
+        }
+        mapping_resnet = {
+            924: 'trouser',
+            207: 'suit',
+            867: 'shirt',
+            435: 'dress',
+            609: 'shorts'
+        }
+        # Get MobileNet-v2 prediction
+        if self.clothing_classifier is not None:
+            try:
+                input_tensor = self.classify_transform(img).unsqueeze(0)
+                with torch.no_grad():
+                    output = self.clothing_classifier(input_tensor)
+                pred_mobile = torch.argmax(output, dim=1).item()
+                pred_mobile = mapping_mobile.get(pred_mobile, "top")
+                predictions.append(pred_mobile)
+            except Exception as e:
+                print(f"MobileNet error: {str(e)}")
+        # Get ResNet50 prediction
+        if self.resnet_classifier is not None:
+            try:
+                input_tensor = self.resnet_transform(img).unsqueeze(0)
+                with torch.no_grad():
+                    output = self.resnet_classifier(input_tensor)
+                pred_resnet = torch.argmax(output, dim=1).item()
+                pred_resnet = mapping_resnet.get(pred_resnet, "top")
+                predictions.append(pred_resnet)
+            except Exception as e:
+                print(f"ResNet50 error: {str(e)}")
+        # Simple vote: if both agree, select it; else choose the first known result.
+        if predictions:
+            if len(predictions) == 2 and predictions[0] == predictions[1]:
+                return predictions[0]
+            else:
+                return predictions[0]
+        return "unknown"
 
     def _analyze_pants(self, img, attributes, segments_info=None):
         """
@@ -1872,6 +1940,7 @@ class ClothingAnalyzer:
     def _create_labeled_visualization(self, original_img, attributes, segments_info):
         """
         Create a visualization with bounding boxes and labels from segmentation info.
+        The clothing type label is drawn centered at the top edge of the image.
         """
         labeled_img = original_img.copy()
         
@@ -1890,10 +1959,33 @@ class ClothingAnalyzer:
             cv2.putText(labeled_img, pos, (rx, ry - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
                         
-        # Label the overall clothing type on the image
+        # Draw the clothing type label centered at the top
         clothing_type = attributes.get('type', 'unknown')
-        cv2.putText(labeled_img, f"Type: {clothing_type}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        label = f"Type: {clothing_type}"
+        # Get text size to center it
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = 1
+        thickness = 2
+        (text_width, text_height), _ = cv2.getTextSize(label, font, scale, thickness)
+        image_width = labeled_img.shape[1]
+        x_coord = (image_width - text_width) // 2
+        y_coord = text_height + 10  # some margin from top
+        cv2.putText(labeled_img, label, (x_coord, y_coord),
+                    font, scale, (0, 0, 255), thickness)
+        
+        # NEW: Updated design for detailed item type labeling at bottom
+        detailed_label = f"Category: {clothing_type.capitalize()}"
+        (det_width, det_height), _ = cv2.getTextSize(detailed_label, font, scale, thickness)
+        bottom_x = (image_width - det_width) // 2
+        bottom_y = labeled_img.shape[0] - 20  # margin from bottom
+        # Draw a filled rectangle behind the text for better readability
+        cv2.rectangle(labeled_img,
+                      (bottom_x - 5, bottom_y - det_height - 5),
+                      (bottom_x + det_width + 5, bottom_y + 5),
+                      (255, 255, 255),  # white background
+                      thickness=-1)
+        cv2.putText(labeled_img, detailed_label, (bottom_x, bottom_y),
+                    font, scale, (0, 0, 0), thickness)  # black text
         
         return labeled_img
 
@@ -1949,3 +2041,95 @@ class ClothingAnalyzer:
         except Exception as e:
             print(f"Error in _analyze_lehenga: {str(e)}")
             return attributes
+
+    def _determine_pants_vs_dress(self, img, segments_info=None):
+        """
+        Specialized method to distinguish between pants and dresses
+        using geometric analysis for clear classification
+        """
+        try:
+            height, width = img.shape[:2]
+            # Convert to grayscale and binary for shape analysis
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            _, binary = cv2.threshold(gray, 20, 255, cv2.THRESH_BINARY)
+            
+            # Get the main body contour
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return None
+                
+            main_contour = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(main_contour)
+            
+            # Feature 1: Height to width ratio (pants are typically taller relative to width)
+            aspect_ratio = h / w if w > 0 else 0
+            
+            # Feature 2: Look for leg separation (pants typically have separation)
+            # Focus on bottom half of the image
+            bottom_half = binary[height//2:, :]
+            midline = width // 2
+            
+            # Scan the bottom half to find gaps around the midline
+            gap_count = 0
+            leg_separation = False
+            
+            for i in range(height//2, height, height//20):  # sample at intervals
+                row = binary[i, :]
+                # Look for pattern of white-black-white around middle (possible leg separation)
+                if i < height-10 and sum(row[midline-10:midline+10]) < 200*20:  # detect dark gap
+                    gap_count += 1
+            
+            # If multiple gaps detected, likely pants
+            leg_separation = gap_count > 2
+            
+            # Feature 3: Bottom edge analysis (pants often have two distinct bottom edges)
+            bottom_section = binary[3*height//4:, :]
+            
+            # Apply edge detection to find bottom contours
+            bottom_edges = cv2.Canny(bottom_section, 50, 150)
+            _, bottom_contours, _ = cv2.findContours(bottom_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Count contours that could be pants legs
+            valid_bottom_contours = 0
+            for cnt in bottom_contours:
+                area = cv2.contourArea(cnt)
+                if area > 100:  # Ignore tiny contours
+                    valid_bottom_contours += 1
+            
+            # Make decision: Combine evidence
+            pants_score = 0
+            
+            # High aspect ratio suggests pants
+            if aspect_ratio > 2.5:
+                pants_score += 3
+            elif aspect_ratio > 2.0:
+                pants_score += 2
+            elif aspect_ratio > 1.5:
+                pants_score += 1
+            
+            # Leg separation strongly suggests pants
+            if leg_separation:
+                pants_score += 3
+            
+            # Multiple bottom contours suggest pants
+            if valid_bottom_contours >= 2:
+                pants_score += 2
+            
+            # Add more weight if segments_info has a very tall main body
+            if segments_info and segments_info.get('main_body'):
+                seg_x, seg_y, seg_w, seg_h = segments_info['main_body']['bbox']
+                seg_aspect = seg_h / seg_w if seg_w > 0 else 0
+                if seg_aspect > 2.2:
+                    pants_score += 2
+            
+            # Return decision
+            if pants_score >= 3:
+                return 'pants'
+            elif pants_score <= 0 and aspect_ratio < 2.0:
+                return 'dress'
+            else:
+                return None  # Uncertain, let other methods decide
+                
+        except Exception as e:
+            print(f"Error in pants vs dress determination: {str(e)}")
+            return None
