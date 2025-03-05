@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Image Upload</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Upload Multiple Images</h1>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <p>{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <div class="upload-form">
+            <form action="{{ url_for('upload_images') }}" method="post" enctype="multipart/form-data">
+                <div class="file-input">
+                    <label for="file-upload">Choose Images</label>
+                    <input id="file-upload" type="file" name="files[]" multiple accept="image/*">
+                    <p class="file-info">No files selected</p>
+                </div>
+                <button type="submit">Upload Images</button>
+            </form>
+        </div>
+        
+        <div class="gallery">
+            <h2>Uploaded Images</h2>
+            <div class="image-grid">
+                {% if images %}
+                    {% for image in images %}
+                        <div class="image-item">
+                            <img src="{{ url_for('static', filename='uploads/' + image) }}" alt="{{ image }}">
+                            <p>{{ image }}</p>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="no-images">No images uploaded yet</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('file-upload').addEventListener('change', function() {
+            const fileInfo = document.querySelector('.file-info');
+            if (this.files.length > 0) {
+                fileInfo.textContent = `${this.files.length} file(s) selected`;
+            } else {
+                fileInfo.textContent = 'No files selected';
+            }
+        });
+    </script>
+</body>
+</html>
