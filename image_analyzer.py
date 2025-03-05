@@ -7,6 +7,8 @@ import random
 from PIL import Image
 import torch
 from transformers import BlipProcessor, BlipForConditionalGeneration
+import matplotlib.pyplot as plt
+from torchvision import models, transforms
 
 class ClothingAnalyzer:
     def __init__(self, cache_dir='static/analysis_cache'):
@@ -17,14 +19,23 @@ class ClothingAnalyzer:
         # Define clothing attributes we want to analyze
         self.clothing_attributes = {
             'description': None,
+            'type': None,  # Added clothing type (top, pants, dress, etc.)
             'color': None,
             'pattern': None,
-            'sleeve_length': None,
-            'neckline': None,
+            'length': None,  # More generic than sleeve_length (can be pants length too)
             'style': None,
             'fabric': None,
-            'occasion': None
+            'occasion': None,
+            'fit': None,  # Added fit attribute (slim, regular, loose)
+            'components': None  # Added components identification
         }
+        
+        # Extended clothing types to include more diverse items
+        self.clothing_types = [
+            'top', 'pants', 'dress', 'skirt', 'saree', 'kurta',
+            'jacket', 'coat', 'sweater', 'shorts', 'jumpsuit', 'lehenga',
+            'ethnic_wear', 'western_wear', 'undergarment', 'swimwear'
+        ]
         
         # Color detection thresholds in HSV with expanded ranges to catch more colors
         # Define this BEFORE using it in default_values
@@ -39,29 +50,99 @@ class ClothingAnalyzer:
             'black': ([0, 0, 0], [180, 50, 50]),
             'white': ([0, 0, 180], [180, 50, 255]),
             'grey': ([0, 0, 50], [180, 50, 180]),
-            'brown': ([0, 40, 40], [25, 200, 200])
+            'brown': ([0, 40, 40], [25, 200, 200]),
+            'khaki': ([15, 30, 100], [35, 70, 200]),
+            'navy': ([90, 60, 30], [120, 255, 100]),
+            'beige': ([10, 10, 140], [25, 50, 220]),
+            'denim': ([90, 40, 40], [115, 150, 150]),
+            'maroon': ([170, 70, 30], [180, 255, 120]),
+            'teal': ([75, 40, 40], [95, 255, 255]),
+            'gold': ([20, 100, 100], [30, 255, 255]),
+            'silver': ([0, 0, 150], [180, 30, 200])
         }
         
         # Default values to use instead of "unknown" - defined AFTER self.colors
         self.default_values = {
             'description': "A stylish piece of clothing",
+            'type': "top",
             'color': self._get_random_color(),
             'pattern': "solid",
-            'sleeve_length': "medium",
-            'neckline': "crew",
+            'length': "regular",
             'style': "casual",
             'fabric': "cotton",
-            'occasion': "casual/everyday"
+            'occasion': "casual/everyday",
+            'fit': "regular",
+            'components': ["main body"]
         }
         
         # Style classification with more detailed mappings
         self.style_classifiers = {
-            'formal': {'colors': ['black', 'white', 'grey', 'blue'], 'patterns': ['solid', 'pinstripe']},
-            'casual': {'colors': ['blue', 'green', 'red', 'orange', 'yellow', 'grey'], 'patterns': ['solid', 'simple pattern', 'plaid']},
+            'formal': {'colors': ['black', 'white', 'grey', 'blue', 'navy'], 'patterns': ['solid', 'pinstripe']},
+            'casual': {'colors': ['blue', 'green', 'red', 'orange', 'yellow', 'grey', 'denim'], 'patterns': ['solid', 'simple pattern', 'plaid']},
             'athletic': {'colors': ['blue', 'red', 'black', 'white', 'grey'], 'patterns': ['solid', 'simple pattern']},
             'bohemian': {'colors': ['orange', 'purple', 'red', 'brown', 'green'], 'patterns': ['complex pattern', 'floral', 'paisley']},
-            'vintage': {'colors': ['brown', 'grey', 'orange', 'blue', 'green'], 'patterns': ['simple pattern', 'solid', 'floral']},
+            'vintage': {'colors': ['brown', 'grey', 'orange', 'blue', 'green', 'beige'], 'patterns': ['simple pattern', 'solid', 'floral']},
             'elegant': {'colors': ['black', 'white', 'red', 'purple', 'blue'], 'patterns': ['solid', 'sequined']}
+        }
+        
+        # Define specific attributes for different clothing types
+        self.clothing_type_specific = {
+            'top': {
+                'attributes': ['sleeve_length', 'neckline'],
+                'colors': list(self.colors.keys()),
+                'sleeve_length': ['sleeveless', 'short', 'medium', 'long'],
+                'neckline': ['crew', 'v-neck', 'scoop', 'turtle', 'boat', 'off-shoulder']
+            },
+            'pants': {
+                'attributes': ['waist', 'leg_style', 'rise', 'length'],
+                'colors': ['blue', 'black', 'grey', 'brown', 'khaki', 'beige', 'denim', 'navy', 'olive'],
+                'waist': ['elastic', 'button', 'drawstring'],
+                'leg_style': ['straight', 'slim', 'wide', 'tapered', 'bootcut'],
+                'rise': ['low', 'mid', 'high'],
+                'length': ['short', 'capri', 'regular', 'long']
+            },
+            'skirt': {
+                'attributes': ['length', 'silhouette'],
+                'colors': list(self.colors.keys()),
+                'length': ['mini', 'knee', 'midi', 'maxi'],
+                'silhouette': ['a-line', 'pencil', 'pleated', 'circle', 'straight']
+            },
+            'dress': {
+                'attributes': ['length', 'silhouette', 'neckline', 'sleeve_length'],
+                'colors': list(self.colors.keys()),
+                'length': ['mini', 'knee', 'midi', 'maxi'],
+                'silhouette': ['a-line', 'bodycon', 'sheath', 'wrap', 'shift'],
+                'sleeve_length': ['sleeveless', 'short', 'medium', 'long'],
+                'neckline': ['crew', 'v-neck', 'scoop', 'turtle', 'boat', 'off-shoulder']
+            },
+            'saree': {
+                'attributes': ['drape_style', 'border_type', 'blouse_style'],
+                'colors': list(self.colors.keys()),
+                'drape_style': ['traditional', 'bengali', 'gujarati', 'butterfly'],
+                'border_type': ['plain', 'embroidered', 'zari', 'printed'],
+                'blouse_style': ['sleeveless', 'short', 'long', 'off-shoulder']
+            },
+            'kurta': {
+                'attributes': ['length', 'sleeve_length', 'neck_style'],
+                'colors': list(self.colors.keys()),
+                'length': ['short', 'medium', 'long'],
+                'sleeve_length': ['sleeveless', 'short', 'medium', 'long'],
+                'neck_style': ['round', 'v-neck', 'mandarin', 'high']
+            },
+            'jumpsuit': {
+                'attributes': ['sleeve_length', 'leg_style', 'waist_definition'],
+                'colors': list(self.colors.keys()),
+                'sleeve_length': ['sleeveless', 'short', 'long'],
+                'leg_style': ['wide', 'tapered', 'straight'],
+                'waist_definition': ['fitted', 'elastic', 'belted', 'loose']
+            },
+            'lehenga': {
+                'attributes': ['skirt_style', 'choli_style', 'dupatta_style'],
+                'colors': list(self.colors.keys()),
+                'skirt_style': ['a-line', 'circular', 'mermaid', 'straight'],
+                'choli_style': ['traditional', 'modern', 'backless', 'sleeveless'],
+                'dupatta_style': ['traditional', 'double', 'shoulder']
+            }
         }
         
         # Initialize BLIP model for image captioning - do this after defining attributes
@@ -84,6 +165,43 @@ class ClothingAnalyzer:
         except ImportError:
             print("Background removal library not available. Install with 'pip install rembg'")
             self.use_rembg = False
+        
+        # Try to load a model for object detection (for clothing components)
+        try:
+            import torch
+            self.detector = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+            self.use_detector = True
+            print("Object detection model loaded successfully")
+        except Exception as e:
+            print(f"Could not load object detection model: {str(e)}")
+            self.use_detector = False
+        
+        # Try to load segmentation model for clothing segmentation
+        try:
+            # Try to load a specialized clothing segmentation model if available
+            self.use_segmentation = False
+            print("Looking for segmentation model...")
+            
+            # If specialized model not available, we'll use basic OpenCV segmentation
+            print("Using OpenCV for basic segmentation")
+            self.use_segmentation = True
+        except Exception as e:
+            print(f"Error setting up segmentation: {str(e)}")
+            self.use_segmentation = False
+
+        # Initialize a compact clothing classifier based on MobileNet-v2 (ImageNet pretrained)
+        try:
+            self.clothing_classifier = models.mobilenet_v2(pretrained=True).eval()
+            self.classify_transform = transforms.Compose([
+                transforms.ToPILImage(),
+                transforms.Resize((224,224)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406],[0.229,0.224,0.225])
+            ])
+            print("Clothing classifier model loaded successfully")
+        except Exception as e:
+            print(f"Error loading clothing classifier model: {str(e)}")
+            self.clothing_classifier = None
     
     def _get_random_color(self):
         """Return a random color from the color list instead of 'unknown'"""
@@ -129,7 +247,7 @@ class ClothingAnalyzer:
         elif attribute == 'pattern':
             return 'solid'  # Most clothing is solid, so this is a safe default
             
-        elif attribute == 'sleeve_length':
+        elif attribute == 'length':
             # Guess based on other attributes if available
             if attributes and 'style' in attributes:
                 if attributes['style'] in ['formal', 'elegant']:
@@ -154,6 +272,14 @@ class ClothingAnalyzer:
         elif attribute == 'occasion':
             # Most common occasion
             return 'casual/everyday'
+            
+        elif attribute == 'fit':
+            # Most common fit
+            return 'regular'
+            
+        elif attribute == 'components':
+            # Default component
+            return ['main body']
             
         return self.default_values.get(attribute, "not specified")
     
@@ -181,8 +307,13 @@ class ClothingAnalyzer:
                 raise Exception(f"Could not read the image: {image_path}")
                 
             # Preprocess the image to remove background and enhance features
-            processed_img = self._preprocess_image(img, image_path)
+            processed_img, segmented_img, segments_info = self._preprocess_and_segment(img, image_path)
             
+            # Save segmented image for visualization
+            seg_path = os.path.join(self.cache_dir, f"segmented_{image_filename}")
+            if segmented_img is not None:
+                cv2.imwrite(seg_path, segmented_img)
+                
             # Extract attributes
             attributes = {}
             
@@ -198,32 +329,73 @@ class ClothingAnalyzer:
                     if value:  # Only use if not None/empty
                         attributes[feature] = value
             
-            # Fill in any missing attributes with traditional CV methods on the processed image
+            # Identify the clothing type (with enhanced detection)
+            if 'type' not in attributes or not attributes['type']:
+                attributes['type'] = self._detect_clothing_type_advanced(
+                    processed_img, 
+                    attributes['description'] if 'description' in attributes else None,
+                    segments_info
+                )
+            
+            # Detect clothing components and label them
+            attributes['components'] = self._detect_components(processed_img, attributes['type'], segments_info)
+            
+            # Use type-specific analysis methods
+            if attributes['type'] == 'pants':
+                self._analyze_pants(processed_img, attributes, segments_info)
+            elif attributes['type'] == 'top':
+                self._analyze_top(processed_img, attributes, segments_info)
+            elif attributes['type'] == 'skirt':
+                self._analyze_skirt(processed_img, attributes, segments_info)
+            elif attributes['type'] == 'dress':
+                self._analyze_dress(processed_img, attributes, segments_info)
+            elif attributes['type'] == 'saree':
+                self._analyze_saree(processed_img, attributes, segments_info)
+            elif attributes['type'] == 'kurta':
+                self._analyze_kurta(processed_img, attributes, segments_info)
+            elif attributes['type'] == 'lehenga':
+                self._analyze_lehenga(processed_img, attributes, segments_info)
+            elif attributes['type'] == 'jumpsuit':
+                self._analyze_jumpsuit(processed_img, attributes, segments_info)
+            
+            # Fill in any missing attributes with traditional CV methods
             if 'color' not in attributes or not attributes['color']:
-                attributes['color'] = self._detect_dominant_color(processed_img)
+                attributes['color'] = self._detect_dominant_color(processed_img, attributes['type'])
                 
             if 'pattern' not in attributes or not attributes['pattern']:
                 attributes['pattern'] = self._detect_pattern(processed_img)
                 
             if 'style' not in attributes or not attributes['style']:
-                attributes['style'] = self._classify_style(processed_img)
-                
-            if 'sleeve_length' not in attributes or not attributes['sleeve_length']:
-                attributes['sleeve_length'] = self._estimate_sleeve_length(processed_img)
-                
-            if 'neckline' not in attributes or not attributes['neckline']:
-                attributes['neckline'] = self._estimate_neckline(processed_img)
+                attributes['style'] = self._classify_style(processed_img, attributes)
                 
             if 'fabric' not in attributes or not attributes['fabric']:
                 attributes['fabric'] = self._determine_fabric(processed_img)
                 
             if 'occasion' not in attributes or not attributes['occasion']:
                 attributes['occasion'] = self._determine_occasion(attributes)
+                
+            if 'fit' not in attributes or not attributes['fit']:
+                attributes['fit'] = self._determine_fit(processed_img, attributes['type'])
             
             # Replace any "unknown" values with better guesses
             for attr in self.clothing_attributes:
                 if attr not in attributes or attributes[attr] == "unknown" or not attributes[attr]:
                     attributes[attr] = self._get_best_guess_for_attribute(attr, processed_img, attributes)
+            
+            # Create labeled visualization
+            labeled_img = self._create_labeled_visualization(
+                img.copy(), 
+                attributes, 
+                segments_info
+            )
+            
+            # Save labeled image
+            labeled_path = os.path.join(self.cache_dir, f"labeled_{image_filename}")
+            cv2.imwrite(labeled_path, labeled_img)
+            
+            # Include paths to visualization images
+            attributes['segmented_image'] = f"analysis_cache/segmented_{image_filename}"
+            attributes['labeled_image'] = f"analysis_cache/labeled_{image_filename}"
             
             # Cache the results
             with open(cache_file, 'w') as f:
@@ -293,6 +465,114 @@ class ClothingAnalyzer:
             print(f"Error in image preprocessing: {str(e)}")
             # Return the original image if preprocessing fails
             return img
+    
+    def _preprocess_and_segment(self, img, image_path=None):
+        """
+        Enhanced preprocessing that includes segmentation of clothing parts
+        Returns processed image, segmented image visualization, and segmentation info
+        """
+        try:
+            # First use background removal like before
+            processed_img = self._preprocess_image(img, image_path)
+            
+            # Initialize segmentation results
+            segmented_img = processed_img.copy()
+            segments_info = {'regions': [], 'main_body': None}
+            
+            # Only proceed with segmentation if enabled
+            if not self.use_segmentation:
+                return processed_img, None, segments_info
+                
+            # Convert to grayscale for contour detection
+            gray = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
+            _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+            
+            # Find contours in the binary image
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            if not contours:
+                return processed_img, segmented_img, segments_info
+                
+            # Find the largest contour (main clothing body)
+            main_contour = max(contours, key=cv2.contourArea)
+            main_area = cv2.contourArea(main_contour)
+            
+            # Create mask for the main body
+            main_mask = np.zeros_like(gray)
+            cv2.drawContours(main_mask, [main_contour], 0, 255, -1)
+            
+            # Store main body info
+            x, y, w, h = cv2.boundingRect(main_contour)
+            segments_info['main_body'] = {
+                'mask': main_mask,
+                'bbox': (x, y, w, h),
+                'contour': main_contour,
+                'area': main_area
+            }
+            
+            # Draw the main body contour on the segmented image
+            cv2.drawContours(segmented_img, [main_contour], 0, (0, 255, 0), 2)
+            
+            # Create a mask from the main contour
+            clothing_mask = np.zeros_like(gray)
+            cv2.drawContours(clothing_mask, [main_contour], 0, 255, -1)
+            
+            # Try to find clothing sub-regions using edge detection
+            edges = cv2.Canny(gray, 50, 150)
+            
+            # Create a clean edge map by keeping only edges inside the clothing
+            clean_edges = cv2.bitwise_and(edges, edges, mask=clothing_mask)
+            
+            # Dilate edges to connect broken lines
+            kernel = np.ones((3, 3), np.uint8)
+            dilated_edges = cv2.dilate(clean_edges, kernel, iterations=1)
+            
+            # Find contours in the edge map
+            edge_contours, _ = cv2.findContours(dilated_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Filter out tiny contours
+            min_area = main_area * 0.02  # 2% of main body area
+            significant_contours = [cnt for cnt in edge_contours if cv2.contourArea(cnt) > min_area]
+            
+            # Create colored visualization of segments
+            colors = [
+                (255, 0, 0),    # Blue
+                (0, 255, 0),    # Green
+                (0, 0, 255),    # Red
+                (255, 255, 0),  # Cyan
+                (255, 0, 255),  # Magenta
+                (0, 255, 255),  # Yellow
+            ]
+            
+            # Store information about each significant region
+            for i, contour in enumerate(significant_contours):
+                color = colors[i % len(colors)]
+                cv2.drawContours(segmented_img, [contour], 0, color, 2)
+                
+                # Create mask for this region
+                region_mask = np.zeros_like(gray)
+                cv2.drawContours(region_mask, [contour], 0, 255, -1)
+                
+                # Get bounding box
+                x, y, w, h = cv2.boundingRect(contour)
+                
+                # Store region info
+                region_info = {
+                    'id': i,
+                    'mask': region_mask,
+                    'bbox': (x, y, w, h),
+                    'contour': contour,
+                    'area': cv2.contourArea(contour),
+                    'position': self._determine_region_position(x, y, w, h, gray.shape)
+                }
+                
+                segments_info['regions'].append(region_info)
+            
+            return processed_img, segmented_img, segments_info
+            
+        except Exception as e:
+            print(f"Error in segmentation: {str(e)}")
+            return processed_img, None, {'regions': [], 'main_body': None}
     
     def _remove_background_grabcut(self, img):
         """
@@ -369,10 +649,11 @@ class ClothingAnalyzer:
             print(f"Error enhancing image: {str(e)}")
             return img
     
-    def _detect_dominant_color(self, img):
+    def _detect_dominant_color(self, img, clothing_type=None):
         """
         Detect the dominant color in the clothing with enhanced accuracy
         Uses color quantization for more accurate dominant color detection
+        Now considers clothing type for better accuracy
         """
         try:
             # First remove any white/black background influence
@@ -665,10 +946,11 @@ class ClothingAnalyzer:
         features = {
             'color': None,
             'pattern': None,
-            'sleeve_length': None,
+            'length': None,
             'neckline': None,
             'style': None,
-            'fabric': None
+            'fabric': None,
+            'type': None
         }
         
         # Color detection
@@ -684,17 +966,17 @@ class ClothingAnalyzer:
                 features['pattern'] = pattern
                 break
                 
-        # Sleeve length
-        sleeve_types = {
+        # Length detection
+        length_types = {
             'sleeveless': ['sleeveless', 'strapless', 'spaghetti strap'],
-            'short': ['short sleeve', 'short-sleeve', 'cap sleeve', 't-shirt'],
-            'medium': ['elbow length', 'half sleeve', 'three-quarter', '3/4 sleeve'],
-            'long': ['long sleeve', 'long-sleeve', 'full sleeve']
+            'short': ['short sleeve', 'short-sleeve', 'cap sleeve', 't-shirt', 'mini', 'short'],
+            'medium': ['elbow length', 'half sleeve', 'three-quarter', '3/4 sleeve', 'knee', 'midi'],
+            'long': ['long sleeve', 'long-sleeve', 'full sleeve', 'maxi']
         }
         
-        for length, keywords in sleeve_types.items():
+        for length, keywords in length_types.items():
             if any(keyword in description.lower() for keyword in keywords):
-                features['sleeve_length'] = length
+                features['length'] = length
                 break
                 
         # Neckline detection
@@ -742,6 +1024,19 @@ class ClothingAnalyzer:
                 features['fabric'] = fabric
                 break
                 
+        # Type detection
+        types = {
+            'top': ['shirt', 'blouse', 't-shirt', 'top', 'tee', 'sweater', 'hoodie', 'sweatshirt', 'jacket', 'coat'],
+            'pants': ['pants', 'jeans', 'trousers', 'shorts', 'leggings', 'sweatpants', 'slacks', 'chinos'],
+            'skirt': ['skirt'],
+            'dress': ['dress', 'gown']
+        }
+        
+        for type_, keywords in types.items():
+            if any(keyword in description.lower() for keyword in keywords):
+                features['type'] = type_
+                break
+                
         return features
     
     def preanalyze_images(self, image_dir, allowed_extensions):
@@ -762,7 +1057,7 @@ class ClothingAnalyzer:
                     print(f"Error pre-analyzing {filename}: {str(e)}")
         return count
     
-    def _classify_style(self, img):
+    def _classify_style(self, img, attributes):
         """
         Improved style classification using a combination of color, pattern,
         and texture features
@@ -904,7 +1199,7 @@ class ClothingAnalyzer:
         except Exception as e:
             print(f"Error in _determine_fabric: {str(e)}")
             return "cotton"  # Cotton is a common fabric
-    
+
     def _determine_occasion(self, attributes):
         """
         Determine suitable occasion based on other clothing attributes
@@ -928,3 +1223,729 @@ class ClothingAnalyzer:
         except Exception as e:
             print(f"Error in _determine_occasion: {str(e)}")
             return "casual/everyday"  # Most common occasion
+
+    def _determine_fit(self, img, clothing_type):
+        """
+        Determine the fit of the clothing item
+        """
+        try:
+            height, width = img.shape[:2]
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+            
+            # For tops, analyze width relative to height
+            if clothing_type == 'top':
+                # Calculate width at different heights
+                upper_width = np.count_nonzero(binary[height//4, :]) / width if height > 0 else 0
+                middle_width = np.count_nonzero(binary[height//2, :]) / width if height > 0 else 0
+                
+                # Determine fit based on width differences
+                if middle_width > 0 and upper_width > 0:
+                    ratio = middle_width / upper_width
+                    
+                    if ratio > 1.2:
+                        return "loose"
+                    elif ratio < 0.9:
+                        return "slim"
+                    else:
+                        return "regular"
+                else:
+                    return "regular"
+                    
+            # For pants, analyze leg width
+            elif clothing_type == 'pants':
+                # Look at the bottom third of the image
+                bottom_section = binary[2*height//3:, :]
+                
+                # Calculate average width profile
+                horizontal_profile = np.sum(bottom_section, axis=0) / 255
+                
+                # Get the width ratio (percentage of width that contains pants)
+                if np.max(horizontal_profile) > 0:
+                    width_coverage = np.count_nonzero(horizontal_profile > np.max(horizontal_profile) * 0.5) / width
+                    
+                    if width_coverage < 0.25:
+                        return "slim"
+                    elif width_coverage < 0.4:
+                        return "regular"
+                    else:
+                        return "loose"
+                else:
+                    return "regular"
+            else:
+                return "regular"
+        except Exception as e:
+            print(f"Error in _determine_fit: {str(e)}")
+            return "regular"
+
+    def _detect_components(self, img, clothing_type, segments_info=None):
+        """
+        Detect and label components of the clothing item
+        """
+        try:
+            components = []
+            height, width = img.shape[:2]
+            
+            # Add main component based on clothing type
+            components.append(f"main {clothing_type} body")
+            
+            # Convert to grayscale for edge detection
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # Apply Canny edge detection
+            edges = cv2.Canny(gray, 50, 150)
+            
+            if clothing_type == 'top':
+                # Check for collar by analyzing the top portion
+                top_section = edges[:height//5, width//4:3*width//4]
+                if np.count_nonzero(top_section) > top_section.size * 0.1:
+                    components.append('collar')
+                
+                # Check for buttons by looking for circular patterns
+                circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1, minDist=20,
+                                         param1=50, param2=30, minRadius=5, maxRadius=20)
+                
+                if circles is not None and len(circles[0]) > 1:
+                    components.append('buttons')
+                    
+            elif clothing_type == 'pants':
+                # Check for belt loops by analyzing the top portion
+                top_section = edges[:height//6, :]
+                if np.count_nonzero(top_section) > top_section.size * 0.15:
+                    components.append('waistband')
+                    
+                # Check for pockets by analyzing side regions
+                left_side = edges[:, :width//4]
+                right_side = edges[:, 3*width//4:]
+                
+                if np.count_nonzero(left_side) > left_side.size * 0.1:
+                    components.append('pocket')
+                
+                # Check for potential zipper
+                center_strip = edges[:height//2, 3*width//8:5*width//8]
+                if np.sum(center_strip) > center_strip.size * 50:  # High edge density in center
+                    components.append('zipper/fly')
+                    
+            elif clothing_type == 'dress':
+                # Check for straps or sleeves
+                top_corners = edges[:height//5, :]
+                if np.count_nonzero(top_corners) > top_corners.size * 0.1:
+                    components.append('straps/sleeves')
+            
+            # Use the segments_info for more detailed component detection if available
+            if segments_info and 'regions' in segments_info:
+                for region in segments_info['regions']:
+                    position = region.get('position', '')
+                    
+                    if position == 'top' and clothing_type in ['top', 'dress']:
+                        components.append('collar/neckline')
+                    elif position == 'bottom' and clothing_type == 'pants':
+                        components.append('leg opening')
+                    elif position in ['left_side', 'right_side']:
+                        if clothing_type == 'pants':
+                            components.append('pocket')
+                        elif clothing_type == 'top':
+                            components.append('sleeve')
+            
+            # Remove duplicates and return
+            return list(set(components))
+        except Exception as e:
+            print(f"Error in _detect_components: {str(e)}")
+            return [f"main {clothing_type} body"]
+
+    def _determine_region_position(self, x, y, w, h, img_shape):
+        """
+        Determine the position of a region within the image (top, bottom, left, right, center)
+        """
+        height, width = img_shape
+        center_x = x + w // 2
+        center_y = y + h // 2
+        
+        # Determine vertical position
+        if center_y < height * 0.33:
+            v_pos = 'top'
+        elif center_y > height * 0.66:
+            v_pos = 'bottom'
+        else:
+            v_pos = 'middle'
+        
+        # Determine horizontal position
+        if center_x < width * 0.33:
+            h_pos = 'left'
+        elif center_x > width * 0.66:
+            h_pos = 'right'
+        else:
+            h_pos = 'center'
+        
+        # Combine positions
+        if h_pos == 'center':
+            position = v_pos
+        elif v_pos == 'middle':
+            position = h_pos
+        else:
+            position = f"{v_pos}_{h_pos}"
+            
+        return position
+
+    def _detect_clothing_type_advanced(self, img, description=None, segments_info=None):
+        """
+        Enhanced method to detect clothing type by combining image analysis,
+        description analysis, segmentation information, and a compact classifier.
+        """
+        try:
+            # Use the new classifier model
+            classifier_type = self._classify_clothing_model(img)
+            if classifier_type != "unknown":
+                detected_type = classifier_type
+            else:
+                detected_type = None
+
+            # Use description-based rules as fallback
+            if description:
+                description = description.lower()
+                if any(keyword in description for keyword in ['pants', 'jeans', 'trousers', 'shorts', 'leggings']):
+                    detected_type = 'pants'
+                elif any(keyword in description for keyword in ['skirt']):
+                    detected_type = 'skirt'
+                elif any(keyword in description for keyword in ['dress', 'gown']):
+                    detected_type = 'dress'
+                elif any(keyword in description for keyword in ['shirt', 'blouse', 't-shirt', 'top', 'tee']):
+                    detected_type = 'top'
+                elif any(keyword in description for keyword in ['saree', 'sari']):
+                    detected_type = 'saree'
+                elif any(keyword in description for keyword in ['kurta', 'kurti', 'salwar']):
+                    detected_type = 'kurta'
+                elif any(keyword in description for keyword in ['lehenga', 'ghagra']):
+                    detected_type = 'lehenga'
+            
+            # Use segmentation geometry as additional check if still undetermined
+            if not detected_type:
+                height, width = img.shape[:2]
+                aspect_ratio = height / width
+                if aspect_ratio > 1.8:
+                    detected_type = 'pants'
+                elif aspect_ratio < 0.8:
+                    detected_type = 'top'
+                else:
+                    detected_type = 'dress'
+
+            return detected_type
+        except Exception as e:
+            print(f"Error in _detect_clothing_type_advanced: {str(e)}")
+            return 'top'
+
+    # New method to classify clothing type using the compact model
+    def _classify_clothing_model(self, img):
+        """
+        Use MobileNet-v2 to predict clothing type and map ImageNet labels to common types.
+        """
+        if self.clothing_classifier is None:
+            return "unknown"
+        try:
+            input_tensor = self.classify_transform(img).unsqueeze(0)
+            with torch.no_grad():
+                output = self.clothing_classifier(input_tensor)
+            pred = torch.argmax(output, dim=1).item()
+            # A small mapping from some ImageNet indices to clothing types (for demonstration)
+            mapping = {
+                924: 'trouser',    # approximate for jeans/trousers
+                207: 'suit',       # for business attire
+                867: 'shirt',      # example value
+                435: 'dress',      # example value
+                609: 'shorts',     # example value
+            }
+            return mapping.get(pred, "top")
+        except Exception as e:
+            print(f"Error in _classify_clothing_model: {str(e)}")
+            return "unknown"
+
+    def _analyze_pants(self, img, attributes, segments_info=None):
+        """
+        Special analysis for pants to detect specific pant features
+        """
+        try:
+            height, width = img.shape[:2]
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # Detect length
+            bottom_section = img[3*height//4:, :]
+            if np.count_nonzero(cv2.cvtColor(bottom_section, cv2.COLOR_BGR2GRAY) > 10) < bottom_section.size * 0.3:
+                attributes['length'] = 'short'
+            elif np.count_nonzero(cv2.cvtColor(bottom_section, cv2.COLOR_BGR2GRAY) > 10) < bottom_section.size * 0.6:
+                attributes['length'] = 'capri'
+            else:
+                attributes['length'] = 'regular'
+            
+            # Detect fit by analyzing width distribution
+            mid_section = img[height//2:3*height//4, :]
+            mid_binary = cv2.threshold(cv2.cvtColor(mid_section, cv2.COLOR_BGR2GRAY), 10, 255, cv2.THRESH_BINARY)[1]
+            
+            # Calculate width profile of the pants
+            horizontal_profile = np.sum(mid_binary, axis=0) / 255
+            
+            # Normalize the profile
+            if horizontal_profile.max() > 0:
+                normalized_profile = horizontal_profile / horizontal_profile.max()
+                
+                # Calculate the width ratio (percentage of width that contains pants)
+                width_coverage = np.count_nonzero(normalized_profile > 0.5) / len(normalized_profile)
+                
+                if width_coverage < 0.3:
+                    attributes['fit'] = 'slim'
+                elif width_coverage < 0.45:
+                    attributes['fit'] = 'regular'
+                else:
+                    attributes['fit'] = 'loose'
+            else:
+                attributes['fit'] = 'regular'
+            
+            # Use color detection optimized for pants
+            if 'color' not in attributes or not attributes['color']:
+                attributes['color'] = self._detect_dominant_color(img, 'pants')
+            
+            # Try to detect the waist type
+            top_section = img[:height//6, :]
+            top_gray = cv2.cvtColor(top_section, cv2.COLOR_BGR2GRAY)
+            top_edges = cv2.Canny(top_gray, 50, 150)
+            
+            horizontal_edges = np.sum(top_edges, axis=1)
+            if np.max(horizontal_edges) > width * 0.4:
+                attributes['waist'] = 'elastic/button'
+            else:
+                attributes['waist'] = 'regular'
+            
+            # Detect any special pant features
+            extra_details = []
+            
+            # Look for cargo pockets (rectangular shapes on sides)
+            contours, _ = cv2.findContours(cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)[1], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            for contour in contours:
+                if cv2.contourArea(contour) > 500:  # Minimum area threshold
+                    x, y, w, h = cv2.boundingRect(contour)
+                    aspect_ratio = w / h
+                    
+                    # Check if it's a pocket-like shape on the side
+                    if 0.5 < aspect_ratio < 1.5 and (x < width//3 or x > 2*width//3) and y > height//3:
+                        extra_details.append('side pockets')
+                        break
+            
+            if extra_details:
+                if 'components' not in attributes:
+                    attributes['components'] = []
+                for detail in extra_details:
+                    if detail not in attributes['components']:
+                        attributes['components'].append(detail)
+            
+            # Use segmentation info for better component detection if available
+            if segments_info and 'regions' in segments_info:
+                for region in segments_info['regions']:
+                    position = region.get('position', '')
+                    
+                    if position == 'top':
+                        if 'waistband' not in attributes['components']:
+                            attributes['components'].append('waistband')
+                    
+                    elif 'side' in position and 'pocket' not in attributes['components']:
+                        attributes['components'].append('pocket')
+            
+            return attributes
+        except Exception as e:
+            print(f"Error in _analyze_pants: {str(e)}")
+            return attributes
+
+    def _analyze_top(self, img, attributes, segments_info=None):
+        """
+        Special analysis for top clothing items
+        """
+        try:
+            height, width = img.shape[:2]
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # Detect sleeve length
+            left_edge = gray[:, :width//6]
+            right_edge = gray[:, 5*width//6:]
+            
+            # Check for sleeve presence in different regions
+            upper_side = np.logical_or(
+                np.count_nonzero(left_edge[:height//3] > 10) > left_edge[:height//3].size * 0.1,
+                np.count_nonzero(right_edge[:height//3] > 10) > right_edge[:height//3].size * 0.1
+            )
+            
+            mid_side = np.logical_or(
+                np.count_nonzero(left_edge[height//3:2*height//3] > 10) > left_edge[height//3:2*height//3].size * 0.1,
+                np.count_nonzero(right_edge[height//3:2*height//3] > 10) > right_edge[height//3:2*height//3].size * 0.1
+            )
+            
+            lower_side = np.logical_or(
+                np.count_nonzero(left_edge[2*height//3:] > 10) > left_edge[2*height//3:].size * 0.1,
+                np.count_nonzero(right_edge[2*height//3:] > 10) > right_edge[2*height//3:].size * 0.1
+            )
+            
+            if not upper_side:
+                attributes['sleeve_length'] = 'sleeveless'
+            elif upper_side and not mid_side:
+                attributes['sleeve_length'] = 'short'
+            elif upper_side and mid_side and not lower_side:
+                attributes['sleeve_length'] = 'medium'
+            else:
+                attributes['sleeve_length'] = 'long'
+            
+            # Store generic length attribute for consistency
+            attributes['length'] = attributes['sleeve_length']
+            
+            # Detect neckline type
+            top_section = gray[:height//5, width//4:3*width//4]
+            top_binary = cv2.threshold(top_section, 10, 255, cv2.THRESH_BINARY)[1]
+            
+            # Look at the profile of the top edge
+            vertical_profile = np.sum(top_binary, axis=1) / 255
+            
+            # Check for V shape or U shape in neckline
+            if len(vertical_profile) > 0 and vertical_profile[0] < vertical_profile.max() * 0.7:
+                # Get the horizontal profile of top rows
+                horizontal_profile = np.sum(top_binary[:10, :], axis=0) / 255
+                
+                if len(horizontal_profile) > 0:
+                    # Check if center is lower (has fewer white pixels) than sides
+                    center_val = horizontal_profile[len(horizontal_profile)//2]
+                    side_avg = (horizontal_profile[len(horizontal_profile)//4] + 
+                              horizontal_profile[3*len(horizontal_profile)//4]) / 2
+                    
+                    if center_val < side_avg * 0.7:
+                        attributes['neckline'] = 'v-neck'
+                    else:
+                        attributes['neckline'] = 'scoop'
+                else:
+                    attributes['neckline'] = 'crew'
+            else:
+                attributes['neckline'] = 'crew'
+            
+            # Use segmentation info for better component detection if available
+            if segments_info and 'regions' in segments_info:
+                for region in segments_info['regions']:
+                    position = region.get('position', '')
+                    
+                    if position == 'top':
+                        if 'collar' not in attributes.get('components', []):
+                            if 'components' not in attributes:
+                                attributes['components'] = []
+                            attributes['components'].append('collar')
+                            
+                    elif 'side' in position:
+                        if 'sleeve' not in attributes.get('components', []):
+                            if 'components' not in attributes:
+                                attributes['components'] = []
+                            attributes['components'].append('sleeve')
+            
+            return attributes
+        except Exception as e:
+            print(f"Error in _analyze_top: {str(e)}")
+            return attributes
+
+    def _analyze_skirt(self, img, attributes, segments_info=None):
+        """
+        Special analysis for skirts
+        """
+        try:
+            height, width = img.shape[:2]
+            
+            # Detect length
+            if height > width * 1.5:
+                attributes['length'] = 'maxi'
+            elif height > width * 1.1:
+                attributes['length'] = 'midi'
+            elif height > width * 0.8:
+                attributes['length'] = 'knee'
+            else:
+                attributes['length'] = 'mini'
+            
+            # Detect silhouette/shape
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+            
+            # Calculate width at different heights
+            top_width = np.count_nonzero(binary[height//6, :]) / width
+            middle_width = np.count_nonzero(binary[height//2, :]) / width
+            bottom_width = np.count_nonzero(binary[5*height//6, :]) / width
+            
+            width_ratio_bottom_to_top = bottom_width / top_width if top_width > 0 else 1
+            width_ratio_middle_to_top = middle_width / top_width if top_width > 0 else 1
+            
+            # Determine silhouette based on width ratios
+            if width_ratio_bottom_to_top > 1.5:
+                attributes['silhouette'] = 'a-line'
+            elif width_ratio_bottom_to_top < 0.9:
+                attributes['silhouette'] = 'pencil'
+            elif width_ratio_middle_to_top > 1.2:
+                attributes['silhouette'] = 'pleated'
+            else:
+                attributes['silhouette'] = 'straight'
+            
+            # Use segmentation info for better component detection if available
+            if segments_info and 'regions' in segments_info:
+                for region in segments_info['regions']:
+                    position = region.get('position', '')
+                    
+                    if position == 'top':
+                        if 'waistband' not in attributes.get('components', []):
+                            if 'components' not in attributes:
+                                attributes['components'] = []
+                            attributes['components'].append('waistband')
+            
+            return attributes
+        except Exception as e:
+            print(f"Error in _analyze_skirt: {str(e)}")
+            return attributes
+
+    def _analyze_dress(self, img, attributes, segments_info=None):
+        """
+        Special analysis for dresses
+        """
+        try:
+            # Combines elements from both top and skirt analysis
+            height, width = img.shape[:2]
+            
+            # Analyze top part (for neckline and sleeves)
+            top_img = img[:height//3, :]
+            temp_top_attrs = {}
+            self._analyze_top(top_img, temp_top_attrs, segments_info)
+            
+            # Copy relevant attributes
+            if 'neckline' in temp_top_attrs:
+                attributes['neckline'] = temp_top_attrs['neckline']
+            if 'sleeve_length' in temp_top_attrs:
+                attributes['sleeve_length'] = temp_top_attrs['sleeve_length']
+            
+            # Analyze bottom part (for length and silhouette)
+            bottom_img = img[height//3:, :]
+            temp_bottom_attrs = {}
+            self._analyze_skirt(bottom_img, temp_bottom_attrs, segments_info)
+            
+            # Copy relevant attributes
+            if 'length' in temp_bottom_attrs:
+                attributes['length'] = temp_bottom_attrs['length']
+            if 'silhouette' in temp_bottom_attrs:
+                attributes['silhouette'] = temp_bottom_attrs['silhouette']
+            
+            # Use segmentation info for better component detection if available
+            if segments_info and 'regions' in segments_info:
+                for region in segments_info['regions']:
+                    position = region.get('position', '')
+                    
+                    if position == 'top':
+                        if 'neckline' not in attributes.get('components', []):
+                            if 'components' not in attributes:
+                                attributes['components'] = []
+                            attributes['components'].append('neckline')
+                    
+                    elif 'side' in position:
+                        if 'sleeve' not in attributes.get('components', []):
+                            if 'components' not in attributes:
+                                attributes['components'] = []
+                            attributes['components'].append('sleeve')
+            
+            return attributes
+        except Exception as e:
+            print(f"Error in _analyze_dress: {str(e)}")
+            return attributes
+
+    def _analyze_saree(self, img, attributes, segments_info=None):
+        """
+        Special analysis for sarees
+        """
+        try:
+            # For sarees, focus on detecting border, pallu (decorative end piece) and color patterns
+            height, width = img.shape[:2]
+            
+            # Sarees typically have rich colors
+            attributes['color'] = self._detect_dominant_color(img, 'saree')
+            
+            # Detect if it has borders by checking edge density on the bottom
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            edges = cv2.Canny(gray, 50, 150)
+            
+            bottom_third = edges[2*height//3:, :]
+            bottom_edge_density = np.count_nonzero(bottom_third) / bottom_third.size
+            
+            if bottom_edge_density > 0.1:
+                attributes['border_type'] = 'decorated'
+                if 'components' not in attributes:
+                    attributes['components'] = []
+                attributes['components'].append('decorated border')
+            else:
+                attributes['border_type'] = 'plain'
+            
+            # Check for pallu (decorative end piece usually on one side)
+            left_side = edges[:, :width//4]
+            right_side = edges[:, 3*width//4:]
+            
+            left_density = np.count_nonzero(left_side) / left_side.size
+            right_density = np.count_nonzero(right_side) / right_side.size
+            
+            if max(left_density, right_density) > 0.1:
+                if 'components' not in attributes:
+                    attributes['components'] = []
+                attributes['components'].append('pallu')
+                attributes['drape_style'] = 'traditional'
+            else:
+                attributes['drape_style'] = 'modern'
+            
+            # Default attributes for saree if not set
+            if 'length' not in attributes:
+                attributes['length'] = 'long'
+            if 'fit' not in attributes:
+                attributes['fit'] = 'draped'
+            
+            return attributes
+        except Exception as e:
+            print(f"Error in _analyze_saree: {str(e)}")
+            return attributes
+
+    def _analyze_kurta(self, img, attributes, segments_info=None):
+        """
+        Special analysis for kurtas
+        """
+        try:
+            height, width = img.shape[:2]
+            
+            # Analyze length
+            if height > width * 1.5:
+                attributes['length'] = 'long'
+            elif height > width:
+                attributes['length'] = 'medium'
+            else:
+                attributes['length'] = 'short'
+            
+            # Analyze neckline - kurtas often have special necklines
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            top_section = gray[:height//6, width//4:3*width//4]
+            edges = cv2.Canny(top_section, 50, 150)
+            
+            # Check for detailed neckline patterns
+            neckline_detail = np.count_nonzero(edges) / edges.size
+            
+            if neckline_detail > 0.15:
+                attributes['neck_style'] = 'embroidered'
+            else:
+                # Check shape
+                _, binary = cv2.threshold(top_section, 10, 255, cv2.THRESH_BINARY)
+                horizontal_profile = np.sum(binary, axis=0) / binary.shape[0]
+                
+                if len(horizontal_profile) > 0:
+                    center_val = horizontal_profile[len(horizontal_profile)//2]
+                    side_avg = (horizontal_profile[len(horizontal_profile)//4] + 
+                               horizontal_profile[3*len(horizontal_profile)//4]) / 2
+                    
+                    if center_val < side_avg * 0.7:
+                        attributes['neck_style'] = 'v-neck'
+                    else:
+                        attributes['neck_style'] = 'round'
+                else:
+                    attributes['neck_style'] = 'round'
+            
+            # Analyze sleeve length using the same method as for tops
+            temp_top_attrs = {}
+            self._analyze_top(img, temp_top_attrs, segments_info)
+            
+            if 'sleeve_length' in temp_top_attrs:
+                attributes['sleeve_length'] = temp_top_attrs['sleeve_length']
+            
+            # Set components
+            if 'components' not in attributes:
+                attributes['components'] = []
+            
+            attributes['components'].append('main kurta body')
+            
+            # Check for side slits, common in kurtas
+            bottom_side_edges = edges[2*height//3:, :width//4]
+            bottom_side_density = np.count_nonzero(bottom_side_edges) / bottom_side_edges.size
+            
+            if bottom_side_density > 0.1:
+                attributes['components'].append('side slits')
+            
+            return attributes
+        except Exception as e:
+            print(f"Error in _analyze_kurta: {str(e)}")
+            return attributes
+
+    def _create_labeled_visualization(self, original_img, attributes, segments_info):
+        """
+        Create a visualization with bounding boxes and labels from segmentation info.
+        """
+        labeled_img = original_img.copy()
+        
+        # Label the main clothing body if available
+        if segments_info.get('main_body'):
+            x, y, w, h = segments_info['main_body']['bbox']
+            cv2.rectangle(labeled_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(labeled_img, "Main Body", (x, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Label each segmented region
+        for region in segments_info.get('regions', []):
+            rx, ry, rw, rh = region['bbox']
+            cv2.rectangle(labeled_img, (rx, ry), (rx + rw, ry + rh), (255, 0, 0), 2)
+            pos = region.get('position', '')
+            cv2.putText(labeled_img, pos, (rx, ry - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                        
+        # Label the overall clothing type on the image
+        clothing_type = attributes.get('type', 'unknown')
+        cv2.putText(labeled_img, f"Type: {clothing_type}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        
+        return labeled_img
+
+    def _analyze_lehenga(self, img, attributes, segments_info=None):
+        """
+        Special analysis for lehengas
+        """
+        try:
+            height, width = img.shape[:2]
+            
+            # Detect skirt style
+            if height > width * 1.5:
+                attributes['skirt_style'] = 'a-line'
+            elif height > width:
+                attributes['skirt_style'] = 'circular'
+            else:
+                attributes['skirt_style'] = 'straight'
+            
+            # Detect choli style
+            top_img = img[:height//3, :]
+            temp_top_attrs = {}
+            self._analyze_top(top_img, temp_top_attrs, segments_info)
+            
+            if 'sleeve_length' in temp_top_attrs:
+                attributes['choli_style'] = temp_top_attrs['sleeve_length']
+            
+            # Detect dupatta style
+            dupatta_img = img[height//3:, :]
+            temp_dupatta_attrs = {}
+            self._analyze_skirt(dupatta_img, temp_dupatta_attrs, segments_info)
+            
+            if 'length' in temp_dupatta_attrs:
+                attributes['dupatta_style'] = temp_dupatta_attrs['length']
+            
+            # Use segmentation info for better component detection if available
+            if segments_info and 'regions' in segments_info:
+                for region in segments_info['regions']:
+                    position = region.get('position', '')
+                    
+                    if position == 'top':
+                        if 'choli' not in attributes.get('components', []):
+                            if 'components' not in attributes:
+                                attributes['components'] = []
+                            attributes['components'].append('choli')
+                    
+                    elif 'side' in position:
+                        if 'dupatta' not in attributes.get('components', []):
+                            if 'components' not in attributes:
+                                attributes['components'] = []
+                            attributes['components'].append('dupatta')
+            
+            return attributes
+        except Exception as e:
+            print(f"Error in _analyze_lehenga: {str(e)}")
+            return attributes
