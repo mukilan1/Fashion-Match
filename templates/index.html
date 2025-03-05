@@ -3,60 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiple Image Upload</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Fashion Image Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #343a40;
+            font-weight: 700;
+        }
+        .upload-section {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .image-container {
+            background-color: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .image-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .image-container img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+            border-radius: 10px 10px 0 0;
+        }
+        .image-info {
+            padding: 15px;
+        }
+        .analysis-panel {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-top: 1px solid #eee;
+            border-radius: 0 0 10px 10px;
+        }
+        .description {
+            font-style: italic;
+            margin-bottom: 10px;
+            color: #6c757d;
+        }
+        .parameter {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px dotted #e9ecef;
+        }
+        .parameter:last-child {
+            border-bottom: none;
+        }
+        .parameter-name {
+            font-weight: 600;
+            color: #495057;
+        }
+        .parameter-value {
+            color: #007bff;
+            font-weight: 500;
+        }
+        .actions {
+            margin-top: 15px;
+        }
+        .btn {
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        .no-images {
+            text-align: center;
+            padding: 50px;
+            background-color: #fff;
+            border-radius: 10px;
+            color: #6c757d;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h1>Upload Multiple Images</h1>
+        <header>
+            <h1>Fashion Image Analyzer</h1>
+            <p class="lead">Upload clothing images for automatic feature analysis</p>
+        </header>
         
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 <div class="flash-messages">
                     {% for message in messages %}
-                        <p>{{ message }}</p>
+                        <div class="alert alert-info alert-dismissible fade show">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
                     {% endfor %}
                 </div>
             {% endif %}
         {% endwith %}
         
-        <div class="upload-form">
-            <form action="{{ url_for('upload_images') }}" method="post" enctype="multipart/form-data">
-                <div class="file-input">
-                    <label for="file-upload">Choose Images</label>
-                    <input id="file-upload" type="file" name="files[]" multiple accept="image/*">
-                    <p class="file-info">No files selected</p>
+        <div class="upload-section">
+            <h2>Upload Images</h2>
+            <form action="{{ url_for('upload_images') }}" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="files" class="form-label">Select clothing images:</label>
+                    <input type="file" class="form-control" name="files[]" id="files" multiple accept=".jpg,.jpeg,.png,.gif">
+                    <div class="form-text">Supported formats: JPG, JPEG, PNG, GIF</div>
                 </div>
-                <button type="submit">Upload Images</button>
+                <button type="submit" class="btn btn-primary">Upload & Analyze</button>
             </form>
-        </div>
-        
-        <div class="gallery">
-            <h2>Uploaded Images</h2>
-            <div class="image-grid">
+            
+            <div class="actions mt-3">
                 {% if images %}
-                    {% for image in images %}
-                        <div class="image-item">
-                            <img src="{{ url_for('static', filename='uploads/' + image) }}" alt="{{ image }}">
-                            <p>{{ image }}</p>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <p class="no-images">No images uploaded yet</p>
+                    <a href="{{ url_for('analyze_all_images') }}" class="btn btn-success">Re-analyze All Images</a>
+                    <a href="{{ url_for('clear_analysis') }}" class="btn btn-warning">Clear Analysis</a>
                 {% endif %}
             </div>
         </div>
+        
+        <div class="row">
+            {% if images %}
+                {% for image in images %}
+                    <div class="col-md-4 mb-4">
+                        <div class="image-container">
+                            <img src="{{ url_for('static', filename='uploads/' + image) }}" alt="{{ image }}">
+                            
+                            <div class="image-info">
+                                <h5 class="mb-3">{{ image }}</h5>
+                                
+                                {% if image in analysis_results %}
+                                    <div class="analysis-panel">
+                                        {% if analysis_results[image].description %}
+                                            <p class="description">"{{ analysis_results[image].description }}"</p>
+                                        {% endif %}
+                                        
+                                        <h6 class="mb-3">Clothing Analysis</h6>
+                                        
+                                        {% for param_name, param_value in analysis_results[image].items() %}
+                                            {% if param_name != 'description' and param_value %}
+                                                <div class="parameter">
+                                                    <span class="parameter-name">{{ param_name.replace('_', ' ').title() }}:</span>
+                                                    <span class="parameter-value">{{ param_value }}</span>
+                                                </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                        
+                                        <div class="mt-3">
+                                            <a href="{{ url_for('analyze_image', filename=image) }}" class="btn btn-sm btn-outline-primary">Re-analyze</a>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="text-center py-3">
+                                        <p>This image has not been analyzed yet.</p>
+                                        <a href="{{ url_for('analyze_image', filename=image) }}" class="btn btn-primary">Analyze Now</a>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-12">
+                    <div class="no-images">
+                        <h3>No Images Yet</h3>
+                        <p>Upload some clothing images to start analyzing them</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
     </div>
-
-    <script>
-        document.getElementById('file-upload').addEventListener('change', function() {
-            const fileInfo = document.querySelector('.file-info');
-            if (this.files.length > 0) {
-                fileInfo.textContent = `${this.files.length} file(s) selected`;
-            } else {
-                fileInfo.textContent = 'No files selected';
-            }
-        });
-    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
