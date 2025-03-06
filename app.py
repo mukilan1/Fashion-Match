@@ -22,12 +22,38 @@ def save_labels(labels):
     with open(LABELS_FILE, "w") as f:
         json.dump(labels, f)
 
+# New: Determine if a garment is a top or bottom wearable
+def determine_wearable_type(label):
+    label_lower = label.lower()
+    top_keywords = ["shirt", "suit", "jacket", "blouse", "sweater", "t-shirt", "vest"]
+    bottom_keywords = ["jean", "trouser", "shorts", "skirt"]
+    for kw in top_keywords:
+        if kw in label_lower:
+            return "top wearable"
+    for kw in bottom_keywords:
+        if kw in label_lower:
+            return "bottom wearable"
+    return "other wearable"
+
 @app.route("/")
 def index():
     labels = load_labels()
-    # Get list of stored images and their labels
     files = os.listdir(app.config["UPLOAD_FOLDER"]) if os.path.exists(app.config["UPLOAD_FOLDER"]) else []
-    images_data = [{"filename": f, "label": labels.get(f, "unknown")} for f in files]
+    images_data = []
+    for f in files:
+        entry = labels.get(f)
+        if isinstance(entry, dict):
+            images_data.append({
+                "filename": f, 
+                "label": entry.get("label", "unknown"), 
+                "wearable": entry.get("wearable", "unknown")
+            })
+        else:
+            images_data.append({
+                "filename": f, 
+                "label": "unknown", 
+                "wearable": "unknown"
+            })
     return render_template("index.html", images=images_data)
 
 @app.route("/upload", methods=["POST"])
@@ -44,8 +70,9 @@ def upload():
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
         label = classify_cloth(file_path)
-        labels[filename] = label
-        results.append({"filename": filename, "label": label})
+        wearable = determine_wearable_type(label)
+        labels[filename] = {"label": label, "wearable": wearable}
+        results.append({"filename": filename, "label": label, "wearable": wearable})
     save_labels(labels)
     return jsonify({"uploaded": results}), 200
 
@@ -61,14 +88,19 @@ def delete_image():
     secure_name = secure_filename(filename)
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
     labels = load_labels()
-    label = labels.get(secure_name, "unknown")
+    entry = labels.get(secure_name)
+    if isinstance(entry, dict):
+        label = entry.get("label", "unknown")
+        wearable = entry.get("wearable", "unknown")
+    else:
+        label = "unknown"
+        wearable = "unknown"
     if os.path.exists(file_path):
         os.remove(file_path)
-        # Remove label entry if exists
         if secure_name in labels:
             del labels[secure_name]
             save_labels(labels)
-        return jsonify({"deleted": secure_name, "label": label}), 200
+        return jsonify({"deleted": secure_name, "label": label, "wearable": wearable}), 200
     return jsonify({"error": "File not found."}), 404
 
 if __name__ == '__main__':
