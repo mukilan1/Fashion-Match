@@ -28,7 +28,8 @@
                 ({{ image.color }})
             </div>
             <div>Pattern: {{ image.pattern }}</div>
-            <div>Sleeve: {{ image.sleeve }}</div>  <!-- New: Display sleeve type -->
+            <div>Hand Style: {{ image.hand }}</div> <!-- New: Display hand style -->
+            {# Removed invalid comment block. If needed, insert your comment here. #}
             <button onclick="deleteImage('{{ image.filename }}')">Delete</button>
           </div>
         {% endfor %}
