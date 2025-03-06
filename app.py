@@ -1,149 +1,75 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
-import json
 from werkzeug.utils import secure_filename
-from image_analyzer import ClothingAnalyzer
+from model import classify_cloth  # Using our classification function
+import json
 
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
-
-# Configure upload folder
-UPLOAD_FOLDER = 'static/uploads'
-ANALYSIS_CACHE = 'static/analysis_cache'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-
-# Create necessary directories
-for directory in [UPLOAD_FOLDER, ANALYSIS_CACHE]:
-    os.makedirs(directory, exist_ok=True)
-
+UPLOAD_FOLDER = "uploads"
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['ANALYSIS_CACHE'] = ANALYSIS_CACHE
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
 
-# Initialize the clothing analyzer
-clothing_analyzer = ClothingAnalyzer(cache_dir=ANALYSIS_CACHE)
+LABELS_FILE = "labels.json"
 
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def load_labels():
+    if os.path.exists(LABELS_FILE):
+        with open(LABELS_FILE, "r") as f:
+            return json.load(f)
+    return {}
 
-def load_all_analyses():
-    """Load all cached analysis results"""
-    analyses = {}
-    try:
-        for filename in os.listdir(app.config['ANALYSIS_CACHE']):
-            if filename.endswith('.json'):
-                image_name = filename[:-5]  # Remove .json extension
-                with open(os.path.join(app.config['ANALYSIS_CACHE'], filename), 'r') as f:
-                    analyses[image_name] = json.load(f)
-    except Exception as e:
-        print(f"Error loading analyses: {str(e)}")
-    return analyses
+def save_labels(labels):
+    with open(LABELS_FILE, "w") as f:
+        json.dump(labels, f)
 
-@app.route('/')
+@app.route("/")
 def index():
-    # Get all uploaded images to display
-    images = os.listdir(app.config['UPLOAD_FOLDER'])
-    images = [img for img in images if img.split('.')[-1].lower() in ALLOWED_EXTENSIONS]
-    
-    # Pre-analyze any images that haven't been analyzed yet
-    auto_analyze_images(images)
-    
-    # Load all analysis results
-    analysis_results = load_all_analyses()
-    
-    return render_template('index.html', images=images, analysis_results=analysis_results)
+    labels = load_labels()
+    # Get list of stored images and their labels
+    files = os.listdir(app.config["UPLOAD_FOLDER"]) if os.path.exists(app.config["UPLOAD_FOLDER"]) else []
+    images_data = [{"filename": f, "label": labels.get(f, "unknown")} for f in files]
+    return render_template("index.html", images=images_data)
 
-def auto_analyze_images(images):
-    """Automatically analyze any images that don't have cached results"""
-    for image in images:
-        cache_file = os.path.join(app.config['ANALYSIS_CACHE'], image + ".json")
-        if not os.path.exists(cache_file):
-            try:
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], image)
-                clothing_analyzer.analyze_image(file_path)
-                print(f"Auto-analyzed: {image}")
-            except Exception as e:
-                print(f"Error auto-analyzing {image}: {str(e)}")
-
-@app.route('/upload', methods=['POST'])
-def upload_images():
-    if 'files[]' not in request.files:
-        flash('No files selected')
-        return redirect(url_for('index'))
-    
-    files = request.files.getlist('files[]')
-    
-    if not files or files[0].filename == '':
-        flash('No files selected')
-        return redirect(url_for('index'))
-    
-    file_count = 0
-    uploaded_files = []
-    
+@app.route("/upload", methods=["POST"])
+def upload():
+    if "images" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    files = request.files.getlist("images")
+    labels = load_labels()
+    results = []
     for file in files:
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            uploaded_files.append(file_path)
-            file_count += 1
-            
-            # Automatically analyze the image after upload
-            try:
-                clothing_analyzer.analyze_image(file_path)
-            except Exception as e:
-                print(f"Error analyzing uploaded image {filename}: {str(e)}")
-    
-    if file_count > 0:
-        flash(f'Successfully uploaded and analyzed {file_count} image(s)')
-    else:
-        flash('No valid images uploaded')
-    
-    return redirect(url_for('index'))
+        if file.filename == "":
+            continue
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        label = classify_cloth(file_path)
+        labels[filename] = label
+        results.append({"filename": filename, "label": label})
+    save_labels(labels)
+    return jsonify({"uploaded": results}), 200
 
-@app.route('/analyze/<filename>')
-def analyze_image(filename):
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    
-    if not os.path.exists(file_path):
-        flash(f"Image {filename} not found")
-        return redirect(url_for('index'))
-    
-    try:
-        # Force reanalysis of the image
-        analysis_result = clothing_analyzer.analyze_image(file_path)
-        flash(f"Successfully analyzed {filename}")
-        return redirect(url_for('index'))
-    except Exception as e:
-        flash(f"Error analyzing image: {str(e)}")
-        return redirect(url_for('index'))
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-@app.route('/analyze_all')
-def analyze_all_images():
-    images = os.listdir(app.config['UPLOAD_FOLDER'])
-    images = [img for img in images if img.split('.')[-1].lower() in ALLOWED_EXTENSIONS]
-    
-    count = clothing_analyzer.preanalyze_images(app.config['UPLOAD_FOLDER'], ALLOWED_EXTENSIONS)
-    
-    flash(f"Analyzed {count} images")
-    return redirect(url_for('index'))
-
-@app.route('/clear_analysis')
-def clear_analysis():
-    try:
-        # Delete all JSON files in the analysis cache directory
-        for file in os.listdir(app.config['ANALYSIS_CACHE']):
-            if file.endswith('.json'):
-                os.remove(os.path.join(app.config['ANALYSIS_CACHE'], file))
-        
-        flash("Analysis results cleared")
-    except Exception as e:
-        flash(f"Error clearing analysis: {str(e)}")
-    
-    return redirect(url_for('index'))
+@app.route('/delete', methods=["POST"])
+def delete_image():
+    filename = request.form.get("filename")
+    if not filename:
+        return jsonify({"error": "No filename provided."}), 400
+    secure_name = secure_filename(filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    labels = load_labels()
+    label = labels.get(secure_name, "unknown")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        # Remove label entry if exists
+        if secure_name in labels:
+            del labels[secure_name]
+            save_labels(labels)
+        return jsonify({"deleted": secure_name, "label": label}), 200
+    return jsonify({"error": "File not found."}), 404
 
 if __name__ == '__main__':
-    # Pre-analyze existing images on startup
-    clothing_analyzer.preanalyze_images(UPLOAD_FOLDER, ALLOWED_EXTENSIONS)
-    app.run(debug=True)
+    app.run(debug=True, threaded=True)

@@ -2,217 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fashion Image Analyzer</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #343a40;
-            font-weight: 700;
-        }
-        .upload-section {
-            background-color: #fff;
-            padding: 25px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .image-container {
-            position: relative;
-            background-color: #fff;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            transition: transform 0.3s;
-        }
-        .image-container:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        .image-container img {
-            width: 100%;
-            height: auto;
-            object-fit: cover;
-            border-radius: 10px 10px 0 0;
-        }
-        .image-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 5px;
-            background-color: rgba(0,0,0,0.5);
-            color: #fff;
-            font-weight: bold;
-            font-size: 1rem;
-            text-align: center;
-            z-index: 2;
-        }
-        .image-info {
-            padding: 15px;
-        }
-        .analysis-panel {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-top: 1px solid #eee;
-            border-radius: 0 0 10px 10px;
-        }
-        .description {
-            font-style: italic;
-            margin-bottom: 10px;
-            color: #6c757d;
-        }
-        .parameter {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            padding-bottom: 8px;
-            border-bottom: 1px dotted #e9ecef;
-        }
-        .parameter:last-child {
-            border-bottom: none;
-        }
-        .parameter-name {
-            font-weight: 600;
-            color: #495057;
-        }
-        .parameter-value {
-            color: #007bff;
-            font-weight: 500;
-        }
-        .actions {
-            margin-top: 15px;
-        }
-        .btn {
-            margin-right: 5px;
-            margin-bottom: 5px;
-        }
-        .flash-messages {
-            margin-bottom: 20px;
-        }
-        .no-images {
-            text-align: center;
-            padding: 50px;
-            background-color: #fff;
-            border-radius: 10px;
-            color: #6c757d;
-        }
-    </style>
+    <title>Upload Images</title>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Fashion Image Analyzer</h1>
-            <p class="lead">Upload clothing images for automatic feature analysis</p>
-        </header>
-        
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for message in messages %}
-                        <div class="alert alert-info alert-dismissible fade show">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-        
-        <div class="upload-section">
-            <h2>Upload Images</h2>
-            <form action="{{ url_for('upload_images') }}" method="POST" enctype="multipart/form-data">
-                <div class="mb-3">
-                    <label for="files" class="form-label">Select clothing images:</label>
-                    <input type="file" class="form-control" name="files[]" id="files" multiple accept=".jpg,.jpeg,.png,.gif">
-                    <div class="form-text">Supported formats: JPG, JPEG, PNG, GIF</div>
-                </div>
-                <button type="submit" class="btn btn-primary">Upload & Analyze</button>
-            </form>
-            
-            <div class="actions mt-3">
-                {% if images %}
-                    <a href="{{ url_for('analyze_all_images') }}" class="btn btn-success">Re-analyze All Images</a>
-                    <a href="{{ url_for('clear_analysis') }}" class="btn btn-warning">Clear Analysis</a>
-                {% endif %}
-            </div>
-        </div>
-        
-        <div class="row">
-            {% if images %}
-                {% for image in images %}
-                    <div class="col-md-4 mb-4">
-                        <div class="image-container">
-                            {% if analysis_results[image] %}
-                                <div class="image-overlay">
-                                    {{ analysis_results[image].type|capitalize }} | {{ analysis_results[image].color|capitalize }}
-                                </div>
-                            {% endif %}
-                            <img src="{{ url_for('static', filename='uploads/' + image) }}" alt="{{ image }}">
-                            
-                            <div class="image-info">
-                                <h5 class="mb-3">{{ image }}</h5>
-                                
-                                {% if image in analysis_results %}
-                                    <div class="analysis-panel">
-                                        {% if analysis_results[image].description %}
-                                            <p class="description">"{{ analysis_results[image].description }}"</p>
-                                        {% endif %}
-                                        
-                                        <h6 class="mb-3">Clothing Analysis</h6>
-                                        
-                                        {% for param_name, param_value in analysis_results[image].items() %}
-                                            {% if param_name != 'description' and param_value %}
-                                                <div class="parameter">
-                                                    <span class="parameter-name">{{ param_name.replace('_', ' ').title() }}:</span>
-                                                    <span class="parameter-value">{{ param_value }}</span>
-                                                </div>
-                                            {% endif %}
-                                        {% endfor %}
-                                        
-                                        <div class="mt-3">
-                                            <a href="{{ url_for('analyze_image', filename=image) }}" class="btn btn-sm btn-outline-primary">Re-analyze</a>
-                                        </div>
-                                    </div>
-                                {% else %}
-                                    <div class="text-center py-3">
-                                        <p>This image has not been analyzed yet.</p>
-                                        <a href="{{ url_for('analyze_image', filename=image) }}" class="btn btn-primary">Analyze Now</a>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="col-12">
-                    <div class="no-images">
-                        <h3>No Images Yet</h3>
-                        <p>Upload some clothing images to start analyzing them</p>
-                    </div>
-                </div>
-            {% endif %}
-        </div>
+    <h1>Upload Multiple Images</h1>
+    <form id="uploadForm">
+        <input type="file" name="images" id="images" multiple accept="image/*">
+        <button type="submit">Upload</button>
+    </form>
+    <div id="preview"></div>
+    <div id="result"></div>
+    <!-- Display history of stored images with labels -->
+    <h2>Uploaded Images History</h2>
+    <div id="history">
+        {% for image in images %}
+          <div id="img-{{ image.filename }}">
+            <img src="{{ url_for('uploaded_file', filename=image.filename) }}" style="max-width:150px; margin:5px;">
+            <div>Label: {{ image.label }}</div>
+            <button onclick="deleteImage('{{ image.filename }}')">Delete</button>
+          </div>
+        {% endfor %}
     </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // Preview selected images
+    document.getElementById('images').addEventListener('change', function() {
+        const preview = document.getElementById('preview');
+        preview.innerHTML = ''; // Clear any existing content
+        Array.from(this.files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.style.maxWidth = '150px';
+                img.style.margin = '5px';
+                preview.appendChild(img);
+            }
+            reader.readAsDataURL(file);
+        });
+    });
+    // Asynchronous file upload to make it faster
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const files = document.getElementById('images').files;
+        const formData = new FormData();
+        for(let i = 0; i < files.length; i++) {
+            formData.append('images', files[i]);
+        }
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData,
+        });
+        const result = await response.json();
+        document.getElementById('result').innerText = JSON.stringify(result);
+    });
+
+    function deleteImage(imageName) {
+        fetch('/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'filename=' + encodeURIComponent(imageName)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.deleted) {
+                alert("Deleted image with label: " + data.label);
+                document.getElementById('img-' + imageName).remove();
+            } else {
+                alert(data.error);
+            }
+        });
+    }
+    </script>
 </body>
 </html>
