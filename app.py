@@ -3,6 +3,10 @@ import os
 from werkzeug.utils import secure_filename
 from model import classify_cloth  # Using our classification function
 import json
+from PIL import Image  # New import for color extraction
+import numpy as np  # Import numpy for array operations
+from sklearn.cluster import KMeans  # New import for advanced color extraction
+import webcolors                # New import for mapping RGB to color names
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
@@ -35,6 +39,46 @@ def determine_wearable_type(label):
             return "bottom wearable"
     return "other wearable"
 
+# New: Advanced function to extract dominant color from the center of the image and map it to a color name
+def extract_dominant_color(image_path):
+    img = Image.open(image_path).convert('RGB')
+    width, height = img.size
+    # Crop center region to minimize background interference
+    img_cropped = img.crop((width * 0.25, height * 0.25, width * 0.75, height * 0.75))
+    img_cropped = img_cropped.resize((150, 150))
+    ar = np.array(img_cropped).reshape((-1, 3))
+    kmeans = KMeans(n_clusters=3, random_state=0).fit(ar)
+    counts = np.bincount(kmeans.labels_)
+    dominant_color = kmeans.cluster_centers_[np.argmax(counts)]
+    dominant_color = tuple(int(x) for x in dominant_color)
+    
+    # Define basic color mapping
+    basic_colors = {
+        'red': (255, 0, 0),
+        'green': (0, 128, 0),
+        'blue': (0, 0, 255),
+        'yellow': (255, 255, 0),
+        'orange': (255, 165, 0),
+        'purple': (128, 0, 128),
+        'pink': (255, 192, 203),
+        'brown': (165, 42, 42),
+        'grey': (128, 128, 128),
+        'black': (0, 0, 0),
+        'white': (255, 255, 255)
+    }
+    
+    def closest_color(requested_color):
+        min_distance = float('inf')
+        closest_name = "unknown"
+        for name, rgb in basic_colors.items():
+            dist = sum((requested_color[i] - rgb[i]) ** 2 for i in range(3))
+            if dist < min_distance:
+                min_distance = dist
+                closest_name = name
+        return closest_name
+    
+    return closest_color(dominant_color)
+
 @app.route("/")
 def index():
     labels = load_labels()
@@ -46,13 +90,15 @@ def index():
             images_data.append({
                 "filename": f, 
                 "label": entry.get("label", "unknown"), 
-                "wearable": entry.get("wearable", "unknown")
+                "wearable": entry.get("wearable", "unknown"),
+                "color": entry.get("color", "unknown")
             })
         else:
             images_data.append({
                 "filename": f, 
                 "label": "unknown", 
-                "wearable": "unknown"
+                "wearable": "unknown",
+                "color": "unknown"
             })
     return render_template("index.html", images=images_data)
 
@@ -71,8 +117,9 @@ def upload():
         file.save(file_path)
         label = classify_cloth(file_path)
         wearable = determine_wearable_type(label)
-        labels[filename] = {"label": label, "wearable": wearable}
-        results.append({"filename": filename, "label": label, "wearable": wearable})
+        color = extract_dominant_color(file_path)  # Now returns the proper color name
+        labels[filename] = {"label": label, "wearable": wearable, "color": color}
+        results.append({"filename": filename, "label": label, "wearable": wearable, "color": color})
     save_labels(labels)
     return jsonify({"uploaded": results}), 200
 

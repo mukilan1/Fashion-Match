@@ -12,7 +12,7 @@
     </form>
     <div id="preview"></div>
     <div id="result"></div>
-    <!-- Display history of stored images with label and wearable type -->
+    <!-- Display history of stored images with label, wearable type and color -->
     <h2>Uploaded Images History</h2>
     <div id="history">
         {% for image in images %}
@@ -20,6 +20,10 @@
             <img src="{{ url_for('uploaded_file', filename=image.filename) }}" style="max-width:150px; margin:5px;">
             <div>Label: {{ image.label }}</div>
             <div>Wearable: {{ image.wearable }}</div>
+            <div>
+                Color: <span style="display:inline-block;width:20px;height:20px;background-color:{{ image.color }};border:1px solid #000;"></span>
+                ({{ image.color }})
+            </div>
             <button onclick="deleteImage('{{ image.filename }}')">Delete</button>
           </div>
         {% endfor %}
@@ -66,7 +70,7 @@
         .then(res => res.json())
         .then(data => {
             if(data.deleted) {
-                alert("Deleted image with label: " + data.label + " and wearable type: " + data.wearable);
+                alert("Deleted image with label: " + data.label + ", wearable type: " + data.wearable + ", color: " + data.color);
                 document.getElementById('img-' + imageName).remove();
             } else {
                 alert(data.error);
