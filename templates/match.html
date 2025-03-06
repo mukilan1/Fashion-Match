@@ -9,6 +9,21 @@
       .item img { max-width: 150px; margin-bottom: 10px; }
       .match-record { border: 1px solid #aaa; padding: 10px; margin: 10px 0; }
       .delete-btn { background: #f44336; color: #fff; border: none; padding: 5px 10px; cursor: pointer; }
+      .reason-container { 
+        background-color: #f8f9fa;
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin-top: 15px;
+        border-radius: 5px;
+        font-style: italic;
+        color: #555;
+      }
+      .reason-container h3 {
+        margin-top: 0;
+        color: #333;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 8px;
+      }
     </style>
 </head>
 <body>
@@ -92,7 +107,6 @@
               <div>Color: ${bestMatch.data.color}</div>
               <div>Pattern: ${bestMatch.data.pattern}</div>
               <div>Similarity Score: ${bestMatch.score.toFixed(2)}</div>
-              <div>Reason: ${res.matched.reason}</div>
             `;
           } else {
             matchDiv.innerHTML = `<h3>No Matching Candidate Found</h3>`;
@@ -101,6 +115,17 @@
           container.appendChild(newDiv);
           container.appendChild(matchDiv);
           matchResultDiv.appendChild(container);
+          
+          // Add reason in a separate container
+          if(bestMatch && res.matched.reason) {
+            const reasonContainer = document.createElement('div');
+            reasonContainer.className = "reason-container";
+            reasonContainer.innerHTML = `
+              <h3>Why These Match Well</h3>
+              <p>${res.matched.reason}</p>
+            `;
+            matchResultDiv.appendChild(reasonContainer);
+          }
       });
       
       document.getElementById("loadMatchesBtn").addEventListener("click", async function() {
@@ -124,11 +149,21 @@
                       <h4>Best Match: ${match.best_match.data.label} (${match.best_match.data.wearable})</h4>
                       <img src="/uploads/${match.best_match.filename}" style="max-width:100px;">
                       <p>Similarity: ${match.best_match.score.toFixed(2)}</p>
-                      <p>Reason: ${match.reason}</p>
                       <button class="delete-btn" data-index="${index}">Delete</button>
                   </div>
               `;
               matchesList.appendChild(record);
+              
+              // Add reason in a separate container for each match record
+              if(match.reason) {
+                const reasonContainer = document.createElement('div');
+                reasonContainer.className = "reason-container";
+                reasonContainer.innerHTML = `
+                  <h3>Why These Match Well</h3>
+                  <p>${match.reason}</p>
+                `;
+                matchesList.appendChild(reasonContainer);
+              }
           });
           // Attach delete buttons events.
           Array.from(document.getElementsByClassName("delete-btn")).forEach(btn => {
