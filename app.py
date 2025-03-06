@@ -123,6 +123,30 @@ def rgb_to_hsl(rgb):
         h *= 60
     return h, s, l
 
+# New: Precompute the color map and its LAB conversion once for efficiency.
+COLOR_MAP = {
+    'maroon': (128, 0, 0), 'dark red': (139, 0, 0), 'red': (255, 0, 0),
+    'salmon': (250, 128, 114), 'coral': (255, 127, 80), 'crimson': (220, 20, 60),
+    'tomato': (255, 99, 71), 'dark orange': (255, 140, 0), 'orange': (255, 165, 0),
+    'orange red': (255, 69, 0), 'gold': (255, 215, 0), 'yellow': (255, 255, 0),
+    'light yellow': (255, 255, 224), 'brown': (165, 42, 42), 'saddle brown': (139, 69, 19),
+    'sienna': (160, 82, 45), 'chocolate': (210, 105, 30), 'peru': (205, 133, 63),
+    'sandy brown': (244, 164, 96), 'tan': (210, 180, 140), 'dark green': (0, 100, 0),
+    'green': (0, 128, 0), 'lime green': (50, 205, 50), 'lime': (0, 255, 0),
+    'olive': (128, 128, 0), 'teal': (0, 128, 128), 'mint': (189, 252, 201),
+    'forest green': (34, 139, 34), 'navy': (0, 0, 128), 'dark blue': (0, 0, 139),
+    'medium blue': (0, 0, 205), 'blue': (0, 0, 255), 'sky blue': (135, 206, 235),
+    'light blue': (173, 216, 230), 'aqua': (0, 255, 255), 'cyan': (0, 255, 255),
+    'turquoise': (64, 224, 208), 'indigo': (75, 0, 130), 'purple': (128, 0, 128),
+    'dark violet': (148, 0, 211), 'violet': (238, 130, 238), 'magenta': (255, 0, 255),
+    'orchid': (218, 112, 214), 'medium orchid': (186, 85, 211), 'pink': (255, 192, 203),
+    'hot pink': (255, 105, 180), 'deep pink': (255, 20, 147), 'black': (0, 0, 0),
+    'dark gray': (64, 64, 64), 'gray': (128, 128, 128), 'silver': (192, 192, 192),
+    'light gray': (211, 211, 211), 'white': (255, 255, 255), 'beige': (245, 245, 220),
+    'ivory': (255, 255, 240)
+}
+LAB_COLOR_MAP = {name: rgb_to_lab(rgb) for name, rgb in COLOR_MAP.items()}
+
 def refine_color(dominant_rgb, current_candidate, color_map):
     h, s, l = rgb_to_hsl(dominant_rgb)
     # Neutral refinement for low saturation
@@ -158,75 +182,62 @@ def refine_color(dominant_rgb, current_candidate, color_map):
             return best_candidate
     return current_candidate
 
-# Updated extract_dominant_color using LAB matching and smart HSL refinement for all colors
+# Updated extract_dominant_color with ensemble methods and global color maps for improved efficiency
 def extract_dominant_color(image_path):
     img = Image.open(image_path).convert('RGB')
     width, height = img.size
     img_np = np.array(img)
-  
-    # Compute border pixels (10% margins)
-    border_pixels = []
-    margin_w = int(0.1 * width)
-    margin_h = int(0.1 * height)
-    border_pixels.extend(img_np[:margin_h].reshape(-1, 3))
-    border_pixels.extend(img_np[-margin_h:].reshape(-1, 3))
-    border_pixels.extend(img_np[:, :margin_w].reshape(-1, 3))
-    border_pixels.extend(img_np[:, -margin_w:].reshape(-1, 3))
-    border_pixels = np.array(border_pixels)
-    background_color = np.median(border_pixels, axis=0)
     
+    # Compute border pixels to detect background and compute median background color.
+    margin_w, margin_h = int(0.1*width), int(0.1*height)
+    borders = np.concatenate((
+        img_np[:margin_h].reshape(-1, 3),
+        img_np[-margin_h:].reshape(-1, 3),
+        img_np[:, :margin_w].reshape(-1, 3),
+        img_np[:, -margin_w:].reshape(-1, 3)
+    ), axis=0)
+    background_color = np.median(borders, axis=0)
+    
+    # Exclude similar-to-background pixels.
     diff = np.linalg.norm(img_np - background_color, axis=2)
-    threshold = 30
-    mask = diff > threshold
-    foreground_pixels = img_np[mask]
+    mask = diff > 30
+    fg_pixels = img_np[mask]
+    if fg_pixels.size < 100:
+        x1, y1, x2, y2 = int(0.25*width), int(0.25*height), int(0.75*width), int(0.75*height)
+        fg_pixels = np.array(img.crop((x1, y1, x2, y2)).resize((150,150))).reshape(-1,3)
     
-    if foreground_pixels.size < 100:
-        x1, y1 = int(width*0.25), int(height*0.25)
-        x2, y2 = int(width*0.75), int(height*0.75)
-        foreground_pixels = np.array(img.crop((x1, y1, x2, y2)).resize((150,150))).reshape(-1, 3)
+    # Method 1: KMeans clustering
+    kmeans = KMeans(n_clusters=3, random_state=0).fit(fg_pixels)
+    kmeans_color = tuple(int(x) for x in kmeans.cluster_centers_[np.argmax(np.bincount(kmeans.labels_))])
     
-    kmeans = KMeans(n_clusters=3, random_state=0).fit(foreground_pixels)
-    counts = np.bincount(kmeans.labels_)
-    dominant_color = kmeans.cluster_centers_[np.argmax(counts)]
-    dominant_color = tuple(int(x) for x in dominant_color)
+    # Method 2: Quantized palette mode
+    quantized = img.quantize(colors=8)
+    palette = quantized.getpalette()
+    colors, counts = zip(*quantized.getcolors() or [(0,0)])
+    if counts:
+        mode_idx = counts.index(max(counts))
+        quant_color = tuple(palette[max(mode_idx,0)*3:max(mode_idx,0)*3+3])
+    else:
+        quant_color = kmeans_color
     
-    # Precomputed color map for LAB matching
-    color_map = {
-        'maroon': (128, 0, 0), 'dark red': (139, 0, 0), 'red': (255, 0, 0),
-        'salmon': (250, 128, 114), 'coral': (255, 127, 80), 'crimson': (220, 20, 60),
-        'tomato': (255, 99, 71), 'dark orange': (255, 140, 0), 'orange': (255, 165, 0),
-        'orange red': (255, 69, 0), 'gold': (255, 215, 0), 'yellow': (255, 255, 0),
-        'light yellow': (255, 255, 224), 'brown': (165, 42, 42), 'saddle brown': (139, 69, 19),
-        'sienna': (160, 82, 45), 'chocolate': (210, 105, 30), 'peru': (205, 133, 63),
-        'sandy brown': (244, 164, 96), 'tan': (210, 180, 140), 'dark green': (0, 100, 0),
-        'green': (0, 128, 0), 'lime green': (50, 205, 50), 'lime': (0, 255, 0),
-        'olive': (128, 128, 0), 'teal': (0, 128, 128), 'mint': (189, 252, 201),
-        'forest green': (34, 139, 34), 'navy': (0, 0, 128), 'dark blue': (0, 0, 139),
-        'medium blue': (0, 0, 205), 'blue': (0, 0, 255), 'sky blue': (135, 206, 235),
-        'light blue': (173, 216, 230), 'aqua': (0, 255, 255), 'cyan': (0, 255, 255),
-        'turquoise': (64, 224, 208), 'indigo': (75, 0, 130), 'purple': (128, 0, 128),
-        'dark violet': (148, 0, 211), 'violet': (238, 130, 238), 'magenta': (255, 0, 255),
-        'orchid': (218, 112, 214), 'medium orchid': (186, 85, 211), 'pink': (255, 192, 203),
-        'hot pink': (255, 105, 180), 'deep pink': (255, 20, 147), 'black': (0, 0, 0),
-        'dark gray': (64, 64, 64), 'gray': (128, 128, 128), 'silver': (192, 192, 192),
-        'light gray': (211, 211, 211), 'white': (255, 255, 255), 'beige': (245, 245, 220),
-        'ivory': (255, 255, 240)
-    }
-    lab_color_map = {name: rgb_to_lab(rgb) for name, rgb in color_map.items()}
-    dominant_lab = rgb_to_lab(dominant_color)
-    def lab_distance(lab1, lab2):
-        return math.sqrt((lab1[0]-lab2[0])**2 + (lab1[1]-lab2[1])**2 + (lab1[2]-lab2[2])**2)
-    min_distance = float('inf')
-    closest_name = None
-    for name, lab_val in lab_color_map.items():
-        d = lab_distance(dominant_lab, lab_val)
-        if d < min_distance:
-            min_distance = d
-            closest_name = name
-
-    # Apply smart HSL-based refinement for all color types
-    closest_name = refine_color(dominant_color, closest_name, color_map)
-    return closest_name
+    # Method 3: Histogram mode (by computing mode in each channel separately)
+    hist_r, _ = np.histogram(fg_pixels[:,0], bins=256, range=(0,255))
+    hist_g, _ = np.histogram(fg_pixels[:,1], bins=256, range=(0,255))
+    hist_b, _ = np.histogram(fg_pixels[:,2], bins=256, range=(0,255))
+    mode_color = (int(np.argmax(hist_r)), int(np.argmax(hist_g)), int(np.argmax(hist_b)))
+    
+    # Ensemble: average the RGB values from the three methods.
+    ensemble_color = tuple(int((a + b + c) / 3) for a, b, c in zip(kmeans_color, quant_color, mode_color))
+    
+    # LAB matching and smart HSL refinement using global COLOR_MAP and LAB_COLOR_MAP.
+    dominant_lab = rgb_to_lab(ensemble_color)
+    best_name, min_dist = None, float('inf')
+    for name, lab in LAB_COLOR_MAP.items():
+        d = math.sqrt(sum((dominant_lab[i]-lab[i])**2 for i in range(3)))
+        if d < min_dist:
+            min_dist, best_name = d, name
+    best_name = refine_color(ensemble_color, best_name, COLOR_MAP)
+    return best_name
 
 # New: Determine the sex of the dress based on the predicted label
 def determine_sex(label):
