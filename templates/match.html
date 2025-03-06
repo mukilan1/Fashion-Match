@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>Clothing Match Making</title>
+    <style>
+      .comparison-container { display: flex; gap: 20px; margin-top: 20px; }
+      .item { border: 1px solid #ccc; padding: 10px; }
+      .item img { max-width: 150px; margin-bottom: 10px; }
+    </style>
 </head>
 <body>
     <h1>Clothing Match Making</h1>
@@ -41,7 +46,61 @@
               body: formData
           });
           const res = await response.json();
-          document.getElementById("matchResult").innerText = JSON.stringify(res, null, 2);
+
+          // Clear previous result
+          const matchResultDiv = document.getElementById("matchResult");
+          matchResultDiv.innerHTML = "";
+
+          if(res.error){
+             matchResultDiv.innerText = res.error;
+             return;
+          }
+
+          const newItem = res.matched.new_item;
+          const bestMatch = res.matched.best_match;
+          
+          // Create a comparison container.
+          const container = document.createElement('div');
+          container.className = "comparison-container";
+
+          // New item details
+          const newDiv = document.createElement('div');
+          newDiv.className = "item";
+          newDiv.innerHTML = `
+            <h3>New Item</h3>
+            <img src="/uploads/${newItem.filename}" alt="New Item">
+            <div>Label: ${newItem.label}</div>
+            <div>Wearable: ${newItem.wearable}</div>
+            <div>Costume: ${newItem.costume}</div>
+            <div>Sex: ${newItem.sex}</div>
+            <div>Color: ${newItem.color}</div>
+            <div>Pattern: ${newItem.pattern}</div>
+            <div>Hand Style: ${newItem.hand}</div>
+          `;
+
+          // Best match details if candidate found.
+          const matchDiv = document.createElement('div');
+          matchDiv.className = "item";
+          if(bestMatch){
+            matchDiv.innerHTML = `
+              <h3>Best Match</h3>
+              <img src="/uploads/${bestMatch.filename}" alt="Best Match">
+              <div>Label: ${bestMatch.data.label}</div>
+              <div>Wearable: ${bestMatch.data.wearable}</div>
+              <div>Costume: ${bestMatch.data.costume}</div>
+              <div>Sex: ${bestMatch.data.sex}</div>
+              <div>Color: ${bestMatch.data.color}</div>
+              <div>Pattern: ${bestMatch.data.pattern}</div>
+              <div>Hand Style: ${bestMatch.data.hand}</div>
+              <div>Similarity Score: ${bestMatch.score.toFixed(2)}</div>
+            `;
+          } else {
+            matchDiv.innerHTML = `<h3>No Matching Candidate Found</h3>`;
+          }
+          
+          container.appendChild(newDiv);
+          container.appendChild(matchDiv);
+          matchResultDiv.appendChild(container);
       });
     </script>
 </body>
