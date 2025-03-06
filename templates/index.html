@@ -14,6 +14,7 @@
     <div id="result"></div>
     <!-- Display history of stored images with all extracted features -->
     <h2>Uploaded Images History</h2>
+    <button onclick="deleteAllImages()">Delete All</button>
     <div id="history">
         {% for image in images %}
           <div id="img-{{ image.filename }}">
@@ -21,11 +22,13 @@
             <div>Label: {{ image.label }}</div>
             <div>Wearable: {{ image.wearable }}</div>
             <div>Costume: {{ image.costume }}</div>
+            <div>Sex: {{ image.sex }}</div>  <!-- New: Display sex information -->
             <div>
                 Color: <span style="display:inline-block;width:20px;height:20px;background-color:{{ image.color }};border:1px solid #000;"></span>
                 ({{ image.color }})
             </div>
             <div>Pattern: {{ image.pattern }}</div>
+            <div>Sleeve: {{ image.sleeve }}</div>  <!-- New: Display sleeve type -->
             <button onclick="deleteImage('{{ image.filename }}')">Delete</button>
           </div>
         {% endfor %}
@@ -78,6 +81,21 @@
                 alert(data.error);
             }
         });
+    }
+
+    async function deleteAllImages() {
+        if(confirm("Are you sure you want to delete all files?")) {
+            const response = await fetch('/delete_all', {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if(result.deleted_all) {
+                alert(result.message);
+                document.getElementById('history').innerHTML = "";
+            } else {
+                alert("Error deleting files");
+            }
+        }
     }
     </script>
 </body>

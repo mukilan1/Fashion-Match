@@ -7,6 +7,7 @@ from PIL import Image
 import numpy as np
 from sklearn.cluster import KMeans
 import webcolors
+import re  # New import for regex matching
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
@@ -44,29 +45,26 @@ def determine_costume_type(label):
         return "party"
     return "casual"
 
-# Updated: Determine pattern type from the predicted label with improved matching
+# Updated: Determine pattern type from the predicted label using regex for accurate matching
 def determine_pattern_type(label):
     label_lower = label.lower()
-    # Use prioritized keywords and check for whole word matches
-    keywords_order = ["polka", "dotted", "dot", "striped", "checked", "plaid", "floral", "paisley", "camouflage", "geometric", "graphic", "print"]
-    mapping = {
-        "polka": "polka dot",
-        "dotted": "dot pattern",
-        "dot": "dot pattern",
-        "striped": "striped",
-        "checked": "checked",
-        "plaid": "plaid",
-        "floral": "floral",
-        "paisley": "paisley",
-        "camouflage": "camouflage",
-        "geometric": "geometric",
-        "graphic": "graphic",
-        "print": "printed"
-    }
-    wrapped_label = f" {label_lower} "
-    for kw in keywords_order:
-        if f" {kw} " in wrapped_label:
-            return mapping[kw]
+    patterns = [
+        (r'\bpolka\s*dot\b', "polka dot"),
+        (r'\bstriped\b', "striped"),
+        (r'\bchecked\b', "checked"),
+        (r'\bplaid\b', "plaid"),
+        (r'\bfloral\b', "floral"),
+        (r'\bpaisley\b', "paisley"),
+        (r'\bcamouflage\b', "camouflage"),
+        (r'\bgeometric\b', "geometric"),
+        (r'\bgraphic\b', "graphic"),
+        (r'\bprint(ed)?\b', "printed"),
+        (r'\bdotted\b', "dot pattern"),
+        (r'\bdot\b', "dot pattern")
+    ]
+    for regex, pattern in patterns:
+        if re.search(regex, label_lower):
+            return pattern
     return "plain"
 
 # Extract dominant color from the center and map to a basic color name
@@ -153,7 +151,7 @@ def upload():
         color = extract_dominant_color(file_path)
         costume = determine_costume_type(label)
         pattern = determine_pattern_type(label)
-        sex = determine_sex(label)  # New: extract sex
+        sex = determine_sex(label)
         labels[filename] = {
             "label": label,
             "wearable": wearable,
@@ -196,6 +194,20 @@ def delete_image():
             save_labels(labels)
         return jsonify({"deleted": secure_name, "label": label, "wearable": wearable}), 200
     return jsonify({"error": "File not found."}), 404
+
+@app.route('/delete_all', methods=["POST"])
+def delete_all():
+    # Delete all files from uploads folder and clear labels
+    labels = load_labels()
+    folder = app.config['UPLOAD_FOLDER']
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        if filename in labels:
+            del labels[filename]
+    save_labels(labels)
+    return jsonify({"deleted_all": True, "message": "All files deleted."}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
