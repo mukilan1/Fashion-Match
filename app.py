@@ -3,10 +3,10 @@ import os
 from werkzeug.utils import secure_filename
 from model import classify_cloth  # Using our classification function
 import json
-from PIL import Image  # New import for color extraction
-import numpy as np  # Import numpy for array operations
-from sklearn.cluster import KMeans  # New import for advanced color extraction
-import webcolors                # New import for mapping RGB to color names
+from PIL import Image
+import numpy as np
+from sklearn.cluster import KMeans
+import webcolors
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
@@ -26,34 +26,54 @@ def save_labels(labels):
     with open(LABELS_FILE, "w") as f:
         json.dump(labels, f)
 
-# New: Determine if a garment is a top or bottom wearable
+# Determine if a garment is top or bottom wearable
 def determine_wearable_type(label):
     label_lower = label.lower()
-    top_keywords = ["shirt", "suit", "jacket", "blouse", "sweater", "t-shirt", "vest"]
-    bottom_keywords = ["jean", "trouser", "shorts", "skirt"]
-    for kw in top_keywords:
-        if kw in label_lower:
-            return "top wearable"
-    for kw in bottom_keywords:
-        if kw in label_lower:
-            return "bottom wearable"
-    return "other wearable"
+    if any(kw in label_lower for kw in ["shirt", "suit", "jacket", "blouse", "sweater", "t-shirt", "vest"]):
+        return "top wearable"
+    if any(kw in label_lower for kw in ["jean", "trouser", "shorts", "skirt"]):
+        return "bottom wearable"
+    return "top wearable"  # Defaulting to a precise type if no keyword is matched
 
-# Updated: Determine costume type from the predicted label, defaulting to "casual"
+# Determine costume type from the predicted label, defaulting to "casual"
 def determine_costume_type(label):
     label_lower = label.lower()
     if any(word in label_lower for word in ["suit", "tux", "formal"]):
         return "formal"
-    elif any(word in label_lower for word in ["party", "dress", "gown"]):
+    if any(word in label_lower for word in ["party", "dress", "gown"]):
         return "party"
-    else:
-        return "casual"
+    return "casual"
 
-# New: Advanced function to extract dominant color from the center of the image and map it to a color name
+# Updated: Determine pattern type from the predicted label with improved matching
+def determine_pattern_type(label):
+    label_lower = label.lower()
+    # Use prioritized keywords and check for whole word matches
+    keywords_order = ["polka", "dotted", "dot", "striped", "checked", "plaid", "floral", "paisley", "camouflage", "geometric", "graphic", "print"]
+    mapping = {
+        "polka": "polka dot",
+        "dotted": "dot pattern",
+        "dot": "dot pattern",
+        "striped": "striped",
+        "checked": "checked",
+        "plaid": "plaid",
+        "floral": "floral",
+        "paisley": "paisley",
+        "camouflage": "camouflage",
+        "geometric": "geometric",
+        "graphic": "graphic",
+        "print": "printed"
+    }
+    wrapped_label = f" {label_lower} "
+    for kw in keywords_order:
+        if f" {kw} " in wrapped_label:
+            return mapping[kw]
+    return "plain"
+
+# Extract dominant color from the center and map to a basic color name
 def extract_dominant_color(image_path):
     img = Image.open(image_path).convert('RGB')
     width, height = img.size
-    # Crop center region to minimize background interference
+    # Crop center region to avoid background interference
     img_cropped = img.crop((width * 0.25, height * 0.25, width * 0.75, height * 0.75))
     img_cropped = img_cropped.resize((150, 150))
     ar = np.array(img_cropped).reshape((-1, 3))
@@ -62,7 +82,6 @@ def extract_dominant_color(image_path):
     dominant_color = kmeans.cluster_centers_[np.argmax(counts)]
     dominant_color = tuple(int(x) for x in dominant_color)
     
-    # Define basic color mapping
     basic_colors = {
         'red': (255, 0, 0),
         'green': (0, 128, 0),
@@ -79,9 +98,9 @@ def extract_dominant_color(image_path):
     
     def closest_color(requested_color):
         min_distance = float('inf')
-        closest_name = "unknown"
+        closest_name = None
         for name, rgb in basic_colors.items():
-            dist = sum((requested_color[i] - rgb[i]) ** 2 for i in range(3))
+            dist = sum((requested_color[i]-rgb[i])**2 for i in range(3))
             if dist < min_distance:
                 min_distance = dist
                 closest_name = name
@@ -89,29 +108,31 @@ def extract_dominant_color(image_path):
     
     return closest_color(dominant_color)
 
+# New: Determine the sex of the dress based on the predicted label
+def determine_sex(label):
+    label_lower = label.lower()
+    if any(word in label_lower for word in ["dress", "gown", "skirt", "blouse", "heels"]):
+        return "female"
+    if any(word in label_lower for word in ["suit", "tux", "man", "mens", "trouser", "male"]):
+        return "male"
+    return "unisex"
+
 @app.route("/")
 def index():
     labels = load_labels()
     files = os.listdir(app.config["UPLOAD_FOLDER"]) if os.path.exists(app.config["UPLOAD_FOLDER"]) else []
     images_data = []
     for f in files:
-        entry = labels.get(f)
-        if isinstance(entry, dict):
-            images_data.append({
-                "filename": f, 
-                "label": entry.get("label", "unknown"), 
-                "wearable": entry.get("wearable", "unknown"),
-                "color": entry.get("color", "unknown"),
-                "costume": entry.get("costume", "unknown")
-            })
-        else:
-            images_data.append({
-                "filename": f, 
-                "label": "unknown", 
-                "wearable": "unknown",
-                "color": "unknown",
-                "costume": "unknown"
-            })
+        entry = labels.get(f, {})
+        images_data.append({
+            "filename": f, 
+            "label": entry.get("label", "unknown"), 
+            "wearable": entry.get("wearable", "unknown"),
+            "color": entry.get("color", "unknown"),
+            "costume": entry.get("costume", "unknown"),
+            "pattern": entry.get("pattern", "unknown"),
+            "sex": entry.get("sex", "unknown")
+        })
     return render_template("index.html", images=images_data)
 
 @app.route("/upload", methods=["POST"])
@@ -129,10 +150,27 @@ def upload():
         file.save(file_path)
         label = classify_cloth(file_path)
         wearable = determine_wearable_type(label)
-        color = extract_dominant_color(file_path)  # Now returns the proper color name
-        costume = determine_costume_type(label)  # New: extract costume type
-        labels[filename] = {"label": label, "wearable": wearable, "color": color, "costume": costume}
-        results.append({"filename": filename, "label": label, "wearable": wearable, "color": color, "costume": costume})
+        color = extract_dominant_color(file_path)
+        costume = determine_costume_type(label)
+        pattern = determine_pattern_type(label)
+        sex = determine_sex(label)  # New: extract sex
+        labels[filename] = {
+            "label": label,
+            "wearable": wearable,
+            "color": color,
+            "costume": costume,
+            "pattern": pattern,
+            "sex": sex
+        }
+        results.append({
+            "filename": filename,
+            "label": label,
+            "wearable": wearable,
+            "color": color,
+            "costume": costume,
+            "pattern": pattern,
+            "sex": sex
+        })
     save_labels(labels)
     return jsonify({"uploaded": results}), 200
 
@@ -148,13 +186,9 @@ def delete_image():
     secure_name = secure_filename(filename)
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
     labels = load_labels()
-    entry = labels.get(secure_name)
-    if isinstance(entry, dict):
-        label = entry.get("label", "unknown")
-        wearable = entry.get("wearable", "unknown")
-    else:
-        label = "unknown"
-        wearable = "unknown"
+    entry = labels.get(secure_name, {})
+    label = entry.get("label", "unknown")
+    wearable = entry.get("wearable", "unknown")
     if os.path.exists(file_path):
         os.remove(file_path)
         if secure_name in labels:
