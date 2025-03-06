@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clothing Match Making</title>
+</head>
+<body>
+    <h1>Clothing Match Making</h1>
+    <!-- Match-making form -->
+    <form id="matchForm" enctype="multipart/form-data">
+        <input type="file" name="match_image" accept="image/*">
+        <button type="submit">Find Best Match</button>
+    </form>
+    <div id="matchResult"></div>
+    
+    <!-- History: Display stored clothing items below the match form -->
+    <h2>Stored Clothing Items</h2>
+    <div id="history">
+        {% for image in images %}
+          <div id="img-{{ image.filename }}">
+            <img src="{{ url_for('uploaded_file', filename=image.filename) }}" style="max-width:150px; margin:5px;">
+            <div>Label: {{ image.label }}</div>
+            <div>Wearable: {{ image.wearable }}</div>
+            <div>Costume: {{ image.costume }}</div>
+            <div>Sex: {{ image.sex }}</div>
+            <div>
+                Color: <span style="display:inline-block;width:20px;height:20px;background-color:{{ image.color }};border:1px solid #000;"></span>
+                ({{ image.color }})
+            </div>
+            <div>Pattern: {{ image.pattern }}</div>
+            <div>Hand Style: {{ image.hand }}</div>
+          </div>
+        {% endfor %}
+    </div>
+    <script>
+      document.getElementById("matchForm").addEventListener("submit", async function(e) {
+          e.preventDefault();
+          const formData = new FormData(this);
+          const response = await fetch("/match_upload", {
+              method: "POST",
+              body: formData
+          });
+          const res = await response.json();
+          document.getElementById("matchResult").innerText = JSON.stringify(res, null, 2);
+      });
+    </script>
+</body>
+</html>

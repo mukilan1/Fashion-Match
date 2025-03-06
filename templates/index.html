@@ -5,10 +5,13 @@
     <title>Upload Images</title>
 </head>
 <body>
+    <h1>Upload Images</h1>
+    <!-- New: Match-making button -->
+    <a href="/match"><button type="button">Go to Match Making</button></a>
     <h1>Upload Multiple Images</h1>
     <form id="uploadForm">
         <input type="file" name="images" id="images" multiple accept="image/*">
-        <button type="submit">Upload</button>
+        <button type="submit">Upload Multiple</button>
     </form>
     <div id="preview"></div>
     <div id="result"></div>
@@ -22,14 +25,13 @@
             <div>Label: {{ image.label }}</div>
             <div>Wearable: {{ image.wearable }}</div>
             <div>Costume: {{ image.costume }}</div>
-            <div>Sex: {{ image.sex }}</div>  <!-- New: Display sex information -->
+            <div>Sex: {{ image.sex }}</div>
             <div>
                 Color: <span style="display:inline-block;width:20px;height:20px;background-color:{{ image.color }};border:1px solid #000;"></span>
                 ({{ image.color }})
             </div>
             <div>Pattern: {{ image.pattern }}</div>
-            <div>Hand Style: {{ image.hand }}</div> <!-- New: Display hand style -->
-            {# Removed invalid comment block. If needed, insert your comment here. #}
+            <div>Hand Style: {{ image.hand }}</div>
             <button onclick="deleteImage('{{ image.filename }}')">Delete</button>
           </div>
         {% endfor %}
