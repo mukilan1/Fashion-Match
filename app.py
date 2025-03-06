@@ -17,6 +17,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LABELS_FILE = "labels.json"
+MATCHES_FILE = "matches.json"
 
 def load_labels():
     if os.path.exists(LABELS_FILE):
@@ -27,6 +28,16 @@ def load_labels():
 def save_labels(labels):
     with open(LABELS_FILE, "w") as f:
         json.dump(labels, f)
+
+def load_matches():
+    if os.path.exists(MATCHES_FILE):
+        with open(MATCHES_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_matches(matches):
+    with open(MATCHES_FILE, "w") as f:
+        json.dump(matches, f)
 
 # Determine if a garment is top or bottom wearable.
 def determine_wearable_type(label):
@@ -260,13 +271,10 @@ def match_upload():
     new_sex = determine_sex(new_label)
     new_hand = determine_hand_style(new_label, file_path) if new_wearable=="top wearable" else "N/A"
     
-    # Formulate a descriptive text from the new item.
     new_text = f"{new_label} {new_costume} {new_pattern} {new_color} {new_sex} {new_hand}"
-    
     stored = load_labels()
     candidates = []
     for fname, data in stored.items():
-        # Ensure we match opposite types.
         if new_wearable == "top wearable" and data.get("wearable") != "bottom wearable":
             continue
         if new_wearable == "bottom wearable" and data.get("wearable") != "top wearable":
@@ -298,7 +306,18 @@ def match_upload():
         },
         "best_match": best_candidate
     }
+    
+    # Save this match record in matches.json
+    matches = load_matches()
+    matches.append(result)
+    save_matches(matches)
+    
     return jsonify({"matched": result}), 200
+
+@app.route("/matches", methods=["GET"])
+def get_matches():
+    matches = load_matches()
+    return jsonify({"matches": matches}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)

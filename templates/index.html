@@ -31,7 +31,7 @@
                 ({{ image.color }})
             </div>
             <div>Pattern: {{ image.pattern }}</div>
-            <div>Hand Style: {{ image.hand }}</div>
+            {# Removed Hand Style display #}
             <button onclick="deleteImage('{{ image.filename }}')">Delete</button>
           </div>
         {% endfor %}
