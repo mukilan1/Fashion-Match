@@ -100,6 +100,31 @@
             }
         }
     }
+
+    // New: Automatic Combo Generation handler with reason display
+    document.getElementById("autoMatchBtn").addEventListener("click", async function() {
+         const response = await fetch("/auto_match", { method: "GET" });
+         const res = await response.json();
+         const container = document.getElementById("autoMatchesResult");
+         container.innerHTML = "";
+         if(res.auto_matches.length === 0) {
+             container.innerText = "No automatic matches found.";
+             return;
+         }
+         res.auto_matches.forEach(match => {
+             const record = document.createElement("div");
+             record.className = "match-record";
+             record.innerHTML = `
+                 <h4>Top: ${match.top.data.label} (${match.top.data.wearable})</h4>
+                 <h4>Bottom: ${match.bottom.data.label} (${match.bottom.data.wearable})</h4>
+                 <p>Similarity Score: ${match.score.toFixed(2)}</p>
+                 <p>Reason: ${match.reason}</p>
+                 <img src="/uploads/${match.top.filename}" style="max-width:100px; margin-right:10px;">
+                 <img src="/uploads/${match.bottom.filename}" style="max-width:100px;">
+             `;
+             container.appendChild(record);
+         });
+    });
     </script>
 </body>
 </html>

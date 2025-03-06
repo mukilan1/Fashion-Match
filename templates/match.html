@@ -8,6 +8,7 @@
       .item { border: 1px solid #ccc; padding: 10px; }
       .item img { max-width: 150px; margin-bottom: 10px; }
       .match-record { border: 1px solid #aaa; padding: 10px; margin: 10px 0; }
+      .delete-btn { background: #f44336; color: #fff; border: none; padding: 5px 10px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -41,6 +42,7 @@
     <!-- Perfect Matches Section -->
     <h2>Perfect Matches</h2>
     <button id="loadMatchesBtn">Load Perfect Matches</button>
+    <button id="deleteAllMatchesBtn">Delete All Matches</button>
     <div id="matchesList"></div>
     
     <script>
@@ -90,6 +92,7 @@
               <div>Color: ${bestMatch.data.color}</div>
               <div>Pattern: ${bestMatch.data.pattern}</div>
               <div>Similarity Score: ${bestMatch.score.toFixed(2)}</div>
+              <div>Reason: ${res.matched.reason}</div>
             `;
           } else {
             matchDiv.innerHTML = `<h3>No Matching Candidate Found</h3>`;
@@ -109,18 +112,48 @@
               matchesList.innerText = "No perfect matches stored.";
               return;
           }
-          res.matches.forEach(match => {
+          res.matches.forEach((match, index) => {
               const record = document.createElement("div");
-              record.className = "match-record";
+              record.className = "comparison-container";
               record.innerHTML = `
-                <h4>New Item: ${match.new_item.label} (${match.new_item.wearable})</h4>
-                <p>Best Match: ${match.best_match.data.label} (${match.best_match.data.wearable}) &mdash; Similarity: ${match.best_match.score.toFixed(2)}</p>
-                <img src="/uploads/${match.new_item.filename}" style="max-width:100px; margin-right:10px;">
-                <img src="/uploads/${match.best_match.filename}" style="max-width:100px;">
+                  <div class="item">
+                      <h4>New Item: ${match.new_item.label} (${match.new_item.wearable})</h4>
+                      <img src="/uploads/${match.new_item.filename}" style="max-width:100px; margin-right:10px;">
+                  </div>
+                  <div class="item">
+                      <h4>Best Match: ${match.best_match.data.label} (${match.best_match.data.wearable})</h4>
+                      <img src="/uploads/${match.best_match.filename}" style="max-width:100px;">
+                      <p>Similarity: ${match.best_match.score.toFixed(2)}</p>
+                      <p>Reason: ${match.reason}</p>
+                      <button class="delete-btn" data-index="${index}">Delete</button>
+                  </div>
               `;
               matchesList.appendChild(record);
           });
+          // Attach delete buttons events.
+          Array.from(document.getElementsByClassName("delete-btn")).forEach(btn => {
+              btn.addEventListener("click", async function() {
+                  const index = this.getAttribute("data-index");
+                  const formData = new FormData();
+                  formData.append("index", index);
+                  const delResponse = await fetch("/delete_match", { method: "POST", body: formData });
+                  const delRes = await delResponse.json();
+                  alert(delRes.message || delRes.error);
+                  // Refresh matches list after deletion.
+                  document.getElementById("loadMatchesBtn").click();
+              });
+          });
       });
-    </script>
+      
+      // Attach deletion event for deleting all matches.
+      document.getElementById("deleteAllMatchesBtn").addEventListener("click", async function() {
+          if(confirm("Are you sure you want to delete all matches?")) {
+              const response = await fetch("/delete_all_matches", { method: "POST" });
+              const res = await response.json();
+              alert(res.message || res.error);
+              document.getElementById("matchesList").innerHTML = "";
+          }
+      });
+  </script>
 </body>
 </html>
