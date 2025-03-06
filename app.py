@@ -33,7 +33,7 @@ def determine_wearable_type(label):
     label_lower = label.lower()
     if any(kw in label_lower for kw in ["shirt", "suit", "jacket", "blouse", "sweater", "t-shirt", "vest"]):
         return "top wearable"
-    if any(kw in label_lower for kw in ["jean", "trouser", "shorts", "skirt"]):
+    if any(kw in label_lower for kw in ["jean", "trouser", "shorts", "skirt", "trunks"]):  # Added 'trunks'
         return "bottom wearable"
     return "top wearable"  # Default if unclear
 
