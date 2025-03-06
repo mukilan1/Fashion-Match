@@ -39,6 +39,16 @@ def determine_wearable_type(label):
             return "bottom wearable"
     return "other wearable"
 
+# Updated: Determine costume type from the predicted label, defaulting to "casual"
+def determine_costume_type(label):
+    label_lower = label.lower()
+    if any(word in label_lower for word in ["suit", "tux", "formal"]):
+        return "formal"
+    elif any(word in label_lower for word in ["party", "dress", "gown"]):
+        return "party"
+    else:
+        return "casual"
+
 # New: Advanced function to extract dominant color from the center of the image and map it to a color name
 def extract_dominant_color(image_path):
     img = Image.open(image_path).convert('RGB')
@@ -91,14 +101,16 @@ def index():
                 "filename": f, 
                 "label": entry.get("label", "unknown"), 
                 "wearable": entry.get("wearable", "unknown"),
-                "color": entry.get("color", "unknown")
+                "color": entry.get("color", "unknown"),
+                "costume": entry.get("costume", "unknown")
             })
         else:
             images_data.append({
                 "filename": f, 
                 "label": "unknown", 
                 "wearable": "unknown",
-                "color": "unknown"
+                "color": "unknown",
+                "costume": "unknown"
             })
     return render_template("index.html", images=images_data)
 
@@ -118,8 +130,9 @@ def upload():
         label = classify_cloth(file_path)
         wearable = determine_wearable_type(label)
         color = extract_dominant_color(file_path)  # Now returns the proper color name
-        labels[filename] = {"label": label, "wearable": wearable, "color": color}
-        results.append({"filename": filename, "label": label, "wearable": wearable, "color": color})
+        costume = determine_costume_type(label)  # New: extract costume type
+        labels[filename] = {"label": label, "wearable": wearable, "color": color, "costume": costume}
+        results.append({"filename": filename, "label": label, "wearable": wearable, "color": color, "costume": costume})
     save_labels(labels)
     return jsonify({"uploaded": results}), 200
 

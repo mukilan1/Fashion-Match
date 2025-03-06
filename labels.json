@@ -1,1 +1,1 @@
-{"t4.png": {"label": "jersey", "wearable": "other wearable", "color": "orange"}, "s1.png": {"label": "trench coat", "wearable": "other wearable", "color": "grey"}, "t2.png": {"label": "jersey", "wearable": "other wearable", "color": "blue"}}
+{"t4.png": {"label": "jersey", "wearable": "other wearable", "color": "orange", "costume": "casual"}, "p1.png": {"label": "jean", "wearable": "bottom wearable", "color": "black", "costume": "casual"}, "c1.png": {"label": "suit", "wearable": "top wearable", "color": "purple", "costume": "formal"}}
