@@ -12,9 +12,10 @@ from sentence_transformers import SentenceTransformer, util
 from transformers import pipeline  # NEW import
 import requests  # NEW import for local API call
 import ollama  # ensure ollama is imported
+import shutil  # Add this import for file operations
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -161,13 +162,88 @@ def generate_dynamic_reason(new_item, candidate, score):
     # Return only the first line
     return cleaned_text.split("\n")[0]
 
+# Add a new function to synchronize labels.json with actual files
+def synchronize_labels():
+    """Ensure labels.json only contains entries for files that actually exist"""
+    labels = load_labels()
+    files = set(os.listdir(app.config["UPLOAD_FOLDER"])) if os.path.exists(app.config["UPLOAD_FOLDER"]) else set()
+    
+    # Remove entries from labels that don't exist as files
+    removed_entries = []
+    for filename in list(labels.keys()):
+        if filename not in files:
+            removed_entries.append(filename)
+            del labels[filename]
+    
+    # Save the cleaned labels
+    if removed_entries:
+        print(f"Removed {len(removed_entries)} stale entries from labels.json")
+        save_labels(labels)
+    
+    return removed_entries
+
+# Do the same for matches
+def synchronize_matches():
+    """Remove matches with missing image files"""
+    labels = load_labels()
+    files = set(os.listdir(app.config["UPLOAD_FOLDER"])) if os.path.exists(app.config["UPLOAD_FOLDER"]) else set()
+    matches = load_matches()
+    
+    valid_matches = []
+    for match in matches:
+        new_item_filename = match.get("new_item", {}).get("filename", "")
+        best_match_filename = match.get("best_match", {}).get("filename", "")
+        
+        # Only keep matches where both files exist
+        if new_item_filename in files and best_match_filename in files:
+            valid_matches.append(match)
+    
+    # Save if any were removed
+    if len(valid_matches) != len(matches):
+        print(f"Removed {len(matches) - len(valid_matches)} stale matches")
+        save_matches(valid_matches)
+    
+    return valid_matches
+
+# Create backup directory for default images if it doesn't exist
+DEFAULT_IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static/defaults")
+if not os.path.exists(DEFAULT_IMG_DIR):
+    os.makedirs(DEFAULT_IMG_DIR, exist_ok=True)
+    # Create a simple default image if it doesn't exist
+    default_img_path = os.path.join(DEFAULT_IMG_DIR, "default_clothing.png")
+    if not os.path.exists(default_img_path):
+        try:
+            # Create simple colored image as fallback
+            img = Image.new('RGB', (300, 300), color=(240, 240, 240))
+            img.save(default_img_path)
+        except Exception as e:
+            print(f"Could not create default image: {e}")
+
 @app.route("/")
 def index():
+    # Synchronize the database with actual files
+    synchronize_labels()
+    
+    # Continue with existing code
     labels = load_labels()
     files = os.listdir(app.config["UPLOAD_FOLDER"]) if os.path.exists(app.config["UPLOAD_FOLDER"]) else []
     images_data = []
+    
     for f in files:
         entry = labels.get(f, {})
+        # Verify file is readable as image
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], f)
+        is_valid_image = os.path.exists(file_path)
+        
+        if is_valid_image:
+            try:
+                # Attempt to open the image to verify it's valid
+                with Image.open(file_path) as img:
+                    img.verify()  # Verify it's an image
+            except Exception:
+                is_valid_image = False
+        
+        # Include a flag to frontend indicating if image is valid
         images_data.append({
             "filename": f,
             "label": entry.get("label", "unknown"),
@@ -176,8 +252,10 @@ def index():
             "color": entry.get("color", "unknown"),
             "pattern": entry.get("pattern", "unknown"),
             "sex": entry.get("sex", "unknown"),
-            "hand": entry.get("hand", "unknown")
+            "hand": entry.get("hand", "unknown"),
+            "is_valid": is_valid_image
         })
+    
     return render_template("index.html", images=images_data)
 
 @app.route("/upload", methods=["POST"])
@@ -187,46 +265,113 @@ def upload():
     files = request.files.getlist("images")
     labels = load_labels()
     results = []
+    
+    # Ensure uploads directory exists
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        try:
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        except Exception as e:
+            return jsonify({"error": f"Failed to create upload directory: {str(e)}"}), 500
+    
     for file in files:
         if file.filename == "":
             continue
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        label = classify_cloth(file_path)
-        wearable = determine_wearable_type(label)
-        color = extract_dominant_color(file_path)
-        costume = determine_costume_type(label)
-        pattern = determine_pattern_type(label)
-        sex = determine_sex(label)
-        hand = determine_hand_style(label, file_path) if wearable == "top wearable" else "N/A"
-        labels[filename] = {
-            "label": label,
-            "wearable": wearable,
-            "costume": costume,
-            "color": color,
-            "pattern": pattern,
-            "sex": sex,
-            "hand": hand
-        }
-        results.append({
-            "filename": filename,
-            "label": label,
-            "wearable": wearable,
-            "costume": costume,
-            "color": color,
-            "pattern": pattern,
-            "sex": sex,
-            "hand": hand
-        })
-    save_labels(labels)
+        try:
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Ensure the parent directory exists
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # Save the file
+            file.save(file_path)
+            
+            # Process the image
+            label = classify_cloth(file_path)
+            wearable = determine_wearable_type(label)
+            color = extract_dominant_color(file_path)
+            costume = determine_costume_type(label)
+            pattern = determine_pattern_type(label)
+            sex = determine_sex(label)
+            hand = determine_hand_style(label, file_path) if wearable == "top wearable" else "N/A"
+            
+            # Store in labels
+            labels[filename] = {
+                "label": label,
+                "wearable": wearable,
+                "costume": costume,
+                "color": color,
+                "pattern": pattern,
+                "sex": sex,
+                "hand": hand
+            }
+            
+            results.append({
+                "filename": filename,
+                "label": label,
+                "wearable": wearable,
+                "costume": costume,
+                "color": color,
+                "pattern": pattern,
+                "sex": sex,
+                "hand": hand,
+                "path": file_path  # Include the full path for debugging
+            })
+        except Exception as e:
+            # Continue with other files if one fails
+            print(f"Error processing {file.filename}: {str(e)}")
+            results.append({
+                "filename": file.filename if file.filename else "unknown",
+                "error": str(e)
+            })
+    
+    # Save the updated labels
+    try:
+        save_labels(labels)
+    except Exception as e:
+        return jsonify({"error": f"Failed to save labels: {str(e)}", "partial_results": results}), 500
+        
     return jsonify({"uploaded": results}), 200
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    # Secure the filename
+    secure_name = secure_filename(filename)
+    
+    # Check if file exists in uploads directory with absolute path
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        # Return default image instead of 404
+        default_img_path = os.path.join(DEFAULT_IMG_DIR, "default_clothing.png")
+        return send_from_directory(os.path.dirname(default_img_path), 
+                                  os.path.basename(default_img_path))
+    
+    # Try to verify if it's a valid image
+    try:
+        with Image.open(file_path) as img:
+            img.verify()  # Will raise exception if not valid image
+    except Exception as e:
+        print(f"Invalid image file {filename}: {str(e)}")
+        # Return default image for corrupted images
+        default_img_path = os.path.join(DEFAULT_IMG_DIR, "default_clothing.png")
+        return send_from_directory(os.path.dirname(default_img_path), 
+                                  os.path.basename(default_img_path))
+    
+    # Set cache control headers and return the file
+    try:
+        response = send_from_directory(app.config['UPLOAD_FOLDER'], secure_name)
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        print(f"Error sending file {filename}: {str(e)}")
+        default_img_path = os.path.join(DEFAULT_IMG_DIR, "default_clothing.png")
+        return send_from_directory(os.path.dirname(default_img_path), 
+                                  os.path.basename(default_img_path))
 
-@app.route("/delete", methods=["POST"])
+@app.route("/delete", methods=["POST"]) 
 def delete_image():
     filename = request.form.get("filename")
     if not filename:
@@ -261,11 +406,29 @@ def delete_all():
 # New: Match-making page. Pass stored images for matching history.
 @app.route("/match", methods=["GET"])
 def match_page():
+    # Synchronize both labels and matches
+    synchronize_labels()
+    synchronize_matches()
+    
+    # Continue with existing code
     labels = load_labels()
     files = os.listdir(app.config["UPLOAD_FOLDER"]) if os.path.exists(app.config["UPLOAD_FOLDER"]) else []
     images_data = []
+    
     for f in files:
         entry = labels.get(f, {})
+        # Verify file is readable as image
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], f)
+        is_valid_image = os.path.exists(file_path)
+        
+        if is_valid_image:
+            try:
+                # Attempt to open the image to verify it's valid
+                with Image.open(file_path) as img:
+                    img.verify()  # Verify it's an image
+            except Exception:
+                is_valid_image = False
+        
         images_data.append({
             "filename": f,
             "label": entry.get("label", "unknown"),
@@ -274,8 +437,10 @@ def match_page():
             "color": entry.get("color", "unknown"),
             "pattern": entry.get("pattern", "unknown"),
             "sex": entry.get("sex", "unknown"),
-            "hand": entry.get("hand", "unknown")
+            "hand": entry.get("hand", "unknown"),
+            "is_valid": is_valid_image
         })
+    
     return render_template("match.html", images=images_data)
 
 # New: Handle match upload: compare the uploaded item with stored items for the best pair.
@@ -400,6 +565,28 @@ def delete_match():
 def delete_all_matches():
     save_matches([])
     return jsonify({"message": "All matches deleted successfully."}), 200
+
+# Add a new route to validate an image
+@app.route("/validate_image/<filename>")
+def validate_image(filename):
+    # Secure the filename
+    secure_name = secure_filename(filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    
+    if not os.path.exists(file_path):
+        return jsonify({"valid": False, "error": "File not found"})
+    
+    try:
+        with Image.open(file_path) as img:
+            img.verify()
+            # Get basic image info
+            return jsonify({
+                "valid": True, 
+                "format": img.format,
+                "size": os.path.getsize(file_path)
+            })
+    except Exception as e:
+        return jsonify({"valid": False, "error": str(e)})
 
 @app.errorhandler(404)
 def page_not_found(e):

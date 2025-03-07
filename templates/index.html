@@ -54,18 +54,52 @@
             box-shadow: 0 8px 15px rgba(0,0,0,.1);
         }
         .item-image {
-            height: 180px;
+            height: 200px;
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
             background-color: #f8f9fa;
             border-bottom: 1px solid #eee;
+            position: relative; /* For loading indicator */
+            min-height: 200px; /* Ensure consistent height even if image fails */
         }
         .item-image img {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+            transition: opacity 0.3s;
+        }
+        .item-image .img-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+            font-size: 0.8rem;
+            text-align: center;
+            padding: 10px;
+        }
+        .img-loading {
+            opacity: 0.5;
+        }
+        .lazy-load {
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .lazy-load.loaded {
+            opacity: 1;
+        }
+        .image-preview img {
+            max-width: 150px;
+            max-height: 150px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+            object-fit: cover; /* Ensures image maintains aspect ratio */
         }
         .item-details {
             padding: 15px;
@@ -145,6 +179,58 @@
             font-family: monospace;
             font-size: 14px;
         }
+        /* More robust image error handling */
+        .image-error-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            color: #dc3545;
+            z-index: 5;
+        }
+        
+        /* Fix for image loading states */
+        .retry-button {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            margin-top: 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .retry-button:hover {
+            background-color: #5a6268;
+        }
+
+        /* Additional styles for fallback handling */
+        .default-image {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            width: 100%;
+            height: 200px;
+            background-color: #f0f0f0;
+            border-radius: 8px;
+            color: #6c757d;
+        }
+        
+        .fallback-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: #6c757d;
+        }
     </style>
 </head>
 <body>
@@ -200,7 +286,38 @@
               <div class="col" id="img-{{ image.filename }}">
                 <div class="item-card">
                     <div class="item-image">
-                        <img src="{{ url_for('uploaded_file', filename=image.filename) }}" alt="{{ image.label }}">
+                        <!-- Add placeholder while image loads -->
+                        <div class="img-placeholder">
+                            <div>
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p>Loading image...</p>
+                            </div>
+                        </div>
+                        <!-- Add hidden error container that becomes visible on error -->
+                        <div class="image-error-container" style="display: none;" id="error-{{ image.filename }}">
+                            <i class="fas fa-exclamation-circle text-danger"></i>
+                            <p>Failed to load image</p>
+                            <button class="retry-button" onclick="retryLoadImage(this, '{{ image.filename }}')">
+                                <i class="fas fa-sync-alt"></i> Retry
+                            </button>
+                        </div>
+                        <!-- Use data-valid attribute to handle known invalid images -->
+                        {% if image.is_valid %}
+                            <img src="{{ url_for('uploaded_file', filename=image.filename) }}?t={{ range(1, 9999) | random }}" 
+                                 alt="{{ image.label }}" 
+                                 class="lazy-load"
+                                 data-valid="true"
+                                 id="img-src-{{ image.filename }}"
+                                 onload="handleImageLoad(this)"
+                                 onerror="handleImageError(this, '{{ image.filename }}')">
+                        {% else %}
+                            <!-- Show default content for known invalid images -->
+                            <div class="default-image">
+                                <i class="fas fa-tshirt fallback-icon"></i>
+                                <p>{{ image.label }}</p>
+                                <small>(Image unavailable)</small>
+                            </div>
+                        {% endif %}
                     </div>
                     <div class="item-details">
                         <ul class="property-list">
@@ -275,13 +392,57 @@
         Array.from(files).forEach(file => {
             const reader = new FileReader();
             reader.onload = function(e) {
+                const imgContainer = document.createElement('div');
+                imgContainer.style.position = 'relative';
+                imgContainer.style.display = 'inline-block';
+                
                 const img = document.createElement('img');
                 img.src = e.target.result;
                 img.style.maxWidth = '150px';
                 img.style.maxHeight = '150px';
                 img.style.margin = '5px';
-                preview.appendChild(img);
-            }
+                
+                // Add error handling
+                img.onerror = function() {
+                    this.onerror = null;
+                    this.src = ''; // Clear source
+                    imgContainer.innerHTML = `
+                        <div style="width:150px;height:150px;margin:5px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-radius:6px;">
+                            <div style="text-align:center;">
+                                <i class="fas fa-exclamation-triangle text-warning" style="font-size:24px;"></i>
+                                <p style="margin-top:5px;font-size:12px;">Invalid image</p>
+                                <button style="background:#6c757d;color:white;border:none;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;" 
+                                        onclick="retryPreviewImage(this, '${e.target.result}')">
+                                    <i class="fas fa-sync-alt"></i> Retry
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                };
+                
+                imgContainer.appendChild(img);
+                preview.appendChild(imgContainer);
+            };
+            
+            reader.onerror = function() {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.width = '150px';
+                errorDiv.style.height = '150px';
+                errorDiv.style.margin = '5px';
+                errorDiv.style.display = 'flex';
+                errorDiv.style.alignItems = 'center';
+                errorDiv.style.justifyContent = 'center';
+                errorDiv.style.backgroundColor = '#f8f9fa';
+                errorDiv.style.borderRadius = '6px';
+                errorDiv.innerHTML = `
+                    <div style="text-align:center;">
+                        <i class="fas fa-exclamation-triangle text-warning" style="font-size:24px;"></i>
+                        <p style="margin-top:5px;font-size:12px;">Failed to read file</p>
+                    </div>
+                `;
+                preview.appendChild(errorDiv);
+            };
+            
             reader.readAsDataURL(file);
         });
     }
@@ -309,24 +470,39 @@
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading...';
         
+        const resultElement = document.getElementById('result');
+        
         try {
             const response = await fetch('/upload', {
                 method: 'POST',
                 body: formData,
             });
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
             const result = await response.json();
             
-            const resultElement = document.getElementById('result');
             resultElement.classList.remove('d-none');
             resultElement.innerText = JSON.stringify(result, null, 2);
             
-            // Refresh the page to show new uploads
+            // Show a success message before reload
+            resultElement.innerHTML += `
+                <div class="alert alert-success mt-3">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Images uploaded successfully. Refreshing page to display them...
+                </div>
+            `;
+            
+            // Increased timeout to ensure server has time to process images
             setTimeout(() => {
                 location.reload();
-            }, 2000);
+            }, 3000); // Increased from 2000ms to 3000ms for better reliability
             
         } catch (error) {
-            alert('Error uploading files: ' + error.message);
+            resultElement.classList.remove('d-none');
+            resultElement.innerHTML = `<div class="alert alert-danger">Error uploading files: ${error.message}</div>`;
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Multiple';
@@ -389,6 +565,168 @@
              `;
              container.appendChild(record);
          });
+    });
+
+    // Add lazy loading for images to prevent crashes
+    document.addEventListener('DOMContentLoaded', function() {
+        const lazyImages = document.querySelectorAll('img.lazy-load');
+        
+        lazyImages.forEach(img => {
+            img.onload = function() {
+                // Hide placeholder and show image
+                const placeholder = this.previousElementSibling;
+                if (placeholder && placeholder.classList.contains('img-placeholder')) {
+                    placeholder.style.display = 'none';
+                }
+                this.classList.add('loaded');
+            };
+        });
+    });
+
+    // New image error handling functions
+    function handleImageLoad(imgElement) {
+        // Hide placeholder and show image
+        const placeholder = imgElement.previousElementSibling.previousElementSibling;
+        if (placeholder && placeholder.classList.contains('img-placeholder')) {
+            placeholder.style.display = 'none';
+        }
+        imgElement.classList.add('loaded');
+        
+        // Hide error container if it exists
+        const errorContainer = document.getElementById('error-' + imgElement.id.replace('img-src-', ''));
+        if (errorContainer) {
+            errorContainer.style.display = 'none';
+        }
+    }
+    
+    function handleImageError(imgElement, filename) {
+        // First attempt with cache busting
+        if (!imgElement.dataset.retried) {
+            imgElement.dataset.retried = '1';
+            const timestamp = new Date().getTime();
+            imgElement.src = `/uploads/${filename}?nocache=${timestamp}`;
+            return;
+        }
+        
+        // Second attempt - try to validate the image on the server
+        if (imgElement.dataset.retried === '1') {
+            imgElement.dataset.retried = '2';
+            
+            // Make a validation request to check if image exists and is valid
+            fetch(`/validate_image/${filename}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.valid) {
+                        // Image is valid but browser can't display it, force reload
+                        const timestamp = new Date().getTime();
+                        imgElement.src = `/uploads/${filename}?forceload=${timestamp}`;
+                    } else {
+                        // Image is confirmed invalid, show error
+                        showImageError(imgElement, filename);
+                    }
+                })
+                .catch(() => {
+                    // Request failed, show error
+                    showImageError(imgElement, filename);
+                });
+                
+            return;
+        }
+        
+        // After all attempts, show error message
+        showImageError(imgElement, filename);
+    }
+    
+    function showImageError(imgElement, filename) {
+        // Show error container
+        const errorContainer = document.getElementById('error-' + filename);
+        if (errorContainer) {
+            errorContainer.style.display = 'flex';
+        }
+        
+        // Hide image placeholder
+        const placeholder = imgElement.previousElementSibling.previousElementSibling;
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
+        
+        // Hide the actual image
+        imgElement.style.display = 'none';
+        
+        // Log error for debugging
+        console.warn(`Image failed to load: ${filename}`);
+    }
+    
+    // Improved retry function
+    function retryLoadImage(btnElement, filename) {
+        const imgElement = document.getElementById('img-src-' + filename);
+        if (imgElement) {
+            // Reset error container visibility
+            const errorContainer = btnElement.parentNode;
+            errorContainer.style.display = 'none';
+            
+            // Show loading placeholder again
+            const placeholder = errorContainer.previousElementSibling;
+            if (placeholder) {
+                placeholder.style.display = 'flex';
+            }
+            
+            // Reset image element
+            imgElement.style.display = '';
+            imgElement.dataset.retried = '';
+            
+            // Force browser to make a completely fresh request by adding a timestamp
+            const timestamp = new Date().getTime();
+            const randomParam = Math.floor(Math.random() * 1000000);
+            imgElement.src = `/uploads/${filename}?retry=${timestamp}&r=${randomParam}`;
+            
+            // Notify the console
+            console.log(`Retrying image load: ${filename}`);
+        }
+    }
+    
+    function retryPreviewImage(btnElement, originalSrc) {
+        const container = btnElement.closest('div').parentNode.parentNode;
+        const img = document.createElement('img');
+        img.src = originalSrc;
+        img.style.maxWidth = '150px';
+        img.style.maxHeight = '150px';
+        img.style.margin = '5px';
+        
+        // Add error handling for retry
+        img.onerror = function() {
+            container.innerHTML = `
+                <div style="width:150px;height:150px;margin:5px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-radius:6px;">
+                    <div style="text-align:center;">
+                        <i class="fas fa-exclamation-triangle text-danger" style="font-size:24px;"></i>
+                        <p style="margin-top:5px;font-size:12px;">Image cannot be displayed</p>
+                    </div>
+                </div>
+            `;
+        };
+        
+        container.innerHTML = '';
+        container.appendChild(img);
+    }
+
+    // Initialize image handling when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("Initializing image handling system");
+        
+        // Process all images to ensure proper loading
+        document.querySelectorAll('.lazy-load').forEach(img => {
+            // Check if the server marked this image as valid
+            const isValid = img.getAttribute('data-valid') === 'true';
+            
+            if (!isValid) {
+                // If the server already knows this image is invalid, don't try to load it
+                const filename = img.id.replace('img-src-', '');
+                showImageError(img, filename);
+            } else {
+                // Ensure all valid images start clean
+                img.dataset.retried = '';
+            }
+        });
     });
     </script>
 

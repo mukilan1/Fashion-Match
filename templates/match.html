@@ -44,7 +44,68 @@
         height: auto; 
         margin-bottom: 15px;
         border-radius: 8px;
-        object-fit: cover;
+        object-fit: contain;
+        transition: opacity 0.3s;
+      }
+      .image-wrapper {
+        position: relative;
+        min-height: 200px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        overflow: hidden; /* Prevent content overflow */
+      }
+      .image-loading {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        color: #6c757d;
+      }
+      .image-error {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        color: #dc3545;
+        z-index: 5;
+      }
+      .retry-image-btn {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 5px 10px;
+        margin-top: 10px;
+        font-size: 0.8rem;
+        cursor: pointer;
+      }
+      .retry-image-btn:hover {
+        background-color: #5a6268;
+      }
+      .fade-in {
+        animation: fadeIn 0.5s;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
       .match-record { 
         border: 1px solid #e0e0e0; 
@@ -245,6 +306,33 @@
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
       }
+      
+      /* Additional styles for fallback handling */
+      .default-image {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        width: 100%;
+        height: 100%;
+        background-color: #f0f0f0;
+        border-radius: 8px;
+        color: #6c757d;
+        min-height: 200px;
+      }
+      
+      .fallback-icon {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        color: #6c757d;
+      }
+      
+      /* Enhanced error display */
+      .connection-error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
     </style>
 </head>
 <body>
@@ -308,7 +396,30 @@
             {% for image in images %}
               <div class="col" id="img-{{ image.filename }}">
                 <div class="item h-100">
-                    <img src="{{ url_for('uploaded_file', filename=image.filename) }}" class="img-fluid mb-3" alt="{{ image.label }}">
+                    <div class="image-wrapper">
+                        {% if image.is_valid %}
+                            <div class="image-loading">
+                                <div class="spinner-border text-primary mb-2" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span>Loading image...</span>
+                            </div>
+                            <img src="{{ url_for('uploaded_file', filename=image.filename) }}?t={{ range(1, 9999) | random }}" 
+                                 class="img-fluid" 
+                                 alt="{{ image.label }}"
+                                 data-filename="{{ image.filename }}"
+                                 data-valid="true"
+                                 onload="this.previousElementSibling.style.display='none';"
+                                 onerror="handleMatchImageError(this, '{{ image.filename }}')">
+                        {% else %}
+                            <!-- Display fallback for invalid images -->
+                            <div class="default-image">
+                                <i class="fas fa-tshirt fallback-icon"></i>
+                                <p>{{ image.label }}</p>
+                                <small>(Image unavailable)</small>
+                            </div>
+                        {% endif %}
+                    </div>
                     <ul class="property-list">
                         <li>
                             <span class="property-name">Label:</span> 
@@ -361,6 +472,11 @@
                   method: "POST",
                   body: formData
               });
+              
+              if (!response.ok) {
+                  throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+              }
+              
               const res = await response.json();
               
               // Hide loading after a minimum time (for better UX)
@@ -369,7 +485,7 @@
                   loadingAnimation.classList.remove("showing");
                   
                   if(res.error){
-                     matchResultDiv.innerText = res.error;
+                     matchResultDiv.innerHTML = `<div class="alert alert-danger">${res.error}</div>`;
                      return;
                   }
                   const newItem = res.matched.new_item;
@@ -382,7 +498,19 @@
                   newDiv.className = "item";
                   newDiv.innerHTML = `
                     <h3 class="item-header">New Item</h3>
-                    <img src="/uploads/${newItem.filename}" alt="New Item">
+                    <div class="image-wrapper">
+                        <div class="image-loading">
+                            <div class="spinner-border text-primary mb-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span>Loading image...</span>
+                        </div>
+                        <img src="/uploads/${newItem.filename}?t=${new Date().getTime()}" 
+                             alt="New Item" 
+                             data-filename="${newItem.filename}"
+                             onload="this.previousElementSibling.style.display='none';"
+                             onerror="handleMatchImageError(this, '${newItem.filename}')">
+                    </div>
                     <ul class="property-list">
                       <li><span class="property-name">Label:</span> <span class="property-value">${newItem.label}</span></li>
                       <li><span class="property-name">Wearable:</span> <span class="property-value">${newItem.wearable}</span></li>
@@ -404,7 +532,19 @@
                   if(bestMatch){
                     matchDiv.innerHTML = `
                       <h3 class="item-header">Best Match</h3>
-                      <img src="/uploads/${bestMatch.filename}" alt="Best Match">
+                      <div class="image-wrapper">
+                          <div class="image-loading">
+                              <div class="spinner-border text-primary mb-2" role="status">
+                                  <span class="visually-hidden">Loading...</span>
+                              </div>
+                              <span>Loading image...</span>
+                          </div>
+                          <img src="/uploads/${bestMatch.filename}?t=${new Date().getTime()}" 
+                               alt="Best Match" 
+                               data-filename="${bestMatch.filename}"
+                               onload="this.previousElementSibling.style.display='none';"
+                               onerror="handleMatchImageError(this, '${bestMatch.filename}')">
+                      </div>
                       <ul class="property-list">
                         <li><span class="property-name">Label:</span> <span class="property-value">${bestMatch.data.label}</span></li>
                         <li><span class="property-name">Wearable:</span> <span class="property-value">${bestMatch.data.wearable}</span></li>
@@ -432,7 +572,7 @@
                   // Add reason in a separate container
                   if(bestMatch && res.matched.reason) {
                     const reasonContainer = document.createElement('div');
-                    reasonContainer.className = "reason-container";
+                    reasonContainer.className = "reason-container fade-in";
                     reasonContainer.innerHTML = `
                       <h3>Why These Match Well</h3>
                       <p>${res.matched.reason}</p>
@@ -448,55 +588,101 @@
       });
       
       document.getElementById("loadMatchesBtn").addEventListener("click", async function() {
-          const response = await fetch("/matches", { method: "GET" });
-          const res = await response.json();
+          // Add loading indicator
           const matchesList = document.getElementById("matchesList");
-          matchesList.innerHTML = "";
-          if(res.matches.length === 0) {
-              matchesList.innerText = "No perfect matches stored.";
-              return;
-          }
-          res.matches.forEach((match, index) => {
-              const record = document.createElement("div");
-              record.className = "comparison-container";
-              record.innerHTML = `
-                  <div class="item">
-                      <h4>New Item: ${match.new_item.label} (${match.new_item.wearable})</h4>
-                      <img src="/uploads/${match.new_item.filename}" style="max-width:100px; margin-right:10px;">
+          matchesList.innerHTML = `
+              <div class="text-center py-4">
+                  <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
                   </div>
-                  <div class="item">
-                      <h4>Best Match: ${match.best_match.data.label} (${match.best_match.data.wearable})</h4>
-                      <img src="/uploads/${match.best_match.filename}" style="max-width:100px;">
-                      <p>Similarity: ${match.best_match.score.toFixed(2)}</p>
-                      <button class="delete-btn" data-index="${index}">Delete</button>
-                  </div>
-              `;
-              matchesList.appendChild(record);
-              
-              // Add reason in a separate container for each match record
-              if(match.reason) {
-                const reasonContainer = document.createElement('div');
-                reasonContainer.className = "reason-container";
-                reasonContainer.innerHTML = `
-                  <h3>Why These Match Well</h3>
-                  <p>${match.reason}</p>
-                `;
-                matchesList.appendChild(reasonContainer);
+                  <p class="mt-2">Loading saved matches...</p>
+              </div>
+          `;
+          
+          try {
+              const response = await fetch("/matches", { method: "GET" });
+              if (!response.ok) {
+                  throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
               }
-          });
-          // Attach delete buttons events.
-          Array.from(document.getElementsByClassName("delete-btn")).forEach(btn => {
-              btn.addEventListener("click", async function() {
-                  const index = this.getAttribute("data-index");
-                  const formData = new FormData();
-                  formData.append("index", index);
-                  const delResponse = await fetch("/delete_match", { method: "POST", body: formData });
-                  const delRes = await delResponse.json();
-                  alert(delRes.message || delRes.error);
-                  // Refresh matches list after deletion.
-                  document.getElementById("loadMatchesBtn").click();
+              
+              const res = await response.json();
+              matchesList.innerHTML = "";
+              
+              if(res.matches.length === 0) {
+                  matchesList.innerHTML = `
+                      <div class="alert alert-info">
+                          <i class="fas fa-info-circle me-2"></i>No perfect matches stored.
+                      </div>
+                  `;
+                  return;
+              }
+              
+              // Rest of existing match loading code with improved image handling
+              res.matches.forEach((match, index) => {
+                  const record = document.createElement("div");
+                  record.className = "comparison-container";
+                  record.innerHTML = `
+                      <div class="item">
+                          <h4 class="item-header">New Item: ${match.new_item.label} (${match.new_item.wearable})</h4>
+                          <div class="image-wrapper" style="max-height:150px;">
+                              <div class="image-loading">
+                                  <div class="spinner-border text-primary mb-2" role="status" style="width:1rem;height:1rem;">
+                                      <span class="visually-hidden">Loading...</span>
+                                  </div>
+                              </div>
+                              <img src="/uploads/${match.new_item.filename}?t=${new Date().getTime()}" 
+                                   alt="New Item" 
+                                   data-filename="${match.new_item.filename}"
+                                   style="max-height:130px;"
+                                   onload="this.previousElementSibling.style.display='none';"
+                                   onerror="handleMatchImageError(this, '${match.new_item.filename}')">
+                          </div>
+                      </div>
+                      <div class="item">
+                          <h4 class="item-header">Best Match: ${match.best_match.data.label} (${match.best_match.data.wearable})</h4>
+                          <div class="image-wrapper" style="max-height:150px;">
+                              <div class="image-loading">
+                                  <div class="spinner-border text-primary mb-2" role="status" style="width:1rem;height:1rem;">
+                                      <span class="visually-hidden">Loading...</span>
+                                  </div>
+                              </div>
+                              <img src="/uploads/${match.best_match.filename}?t=${new Date().getTime()}" 
+                                   alt="Best Match" 
+                                   data-filename="${match.best_match.filename}"
+                                   style="max-height:130px;"
+                                   onload="this.previousElementSibling.style.display='none';"
+                                   onerror="handleMatchImageError(this, '${match.best_match.filename}')">
+                          </div>
+                          <p>Similarity: ${match.best_match.score.toFixed(2)}</p>
+                          <button class="delete-btn" data-index="${index}">
+                              <i class="fas fa-trash-alt me-1"></i> Delete
+                          </button>
+                      </div>
+                  `;
+                  matchesList.appendChild(record);
+                  
+                  // Add reason container
+                  if(match.reason) {
+                    const reasonContainer = document.createElement('div');
+                    reasonContainer.className = "reason-container";
+                    reasonContainer.innerHTML = `
+                      <h3>Why These Match Well</h3>
+                      <p>${match.reason}</p>
+                    `;
+                    matchesList.appendChild(reasonContainer);
+                  }
               });
-          });
+              
+              // Attach delete buttons events
+              Array.from(document.getElementsByClassName("delete-btn")).forEach(btn => {
+                  btn.addEventListener("click", async function() {
+                      // ...existing delete button code...
+                  });
+              });
+              
+          } catch (error) {
+              matchesList.innerHTML = `<div class="alert alert-danger">Error loading matches: ${error.message}</div>`;
+          }
       });
       
       // Attach deletion event for deleting all matches.
@@ -508,6 +694,282 @@
               document.getElementById("matchesList").innerHTML = "";
           }
       });
+      
+      // New function to handle image errors with retry mechanism
+      function handleMatchImageError(imgElement, filename) {
+        // Check if the server has already marked this as invalid
+        if (imgElement.getAttribute('data-valid') !== 'true') {
+            showMatchImageError(imgElement, 'Image was marked invalid by server');
+            return;
+        }
+        
+        // First attempt: try with cache-busting
+        if (!imgElement.dataset.retried) {
+          imgElement.dataset.retried = '1';
+          const timestamp = new Date().getTime();
+          imgElement.src = `/uploads/${filename}?nocache=${timestamp}`;
+          return;
+        }
+        
+        // Second attempt: check if image exists on server
+        if (imgElement.dataset.retried === '1') {
+            imgElement.dataset.retried = '2';
+            
+            // Make server-side validation request
+            fetch(`/validate_image/${filename}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.valid) {
+                        // Image exists but browser can't display it - try one more time
+                        const timestamp = new Date().getTime();
+                        const random = Math.floor(Math.random() * 1000000);
+                        imgElement.src = `/uploads/${filename}?forcereload=${timestamp}&r=${random}`;
+                    } else {
+                        // Server confirms image is invalid
+                        showMatchImageError(imgElement, data.error || 'Invalid image file');
+                    }
+                })
+                .catch(error => {
+                    // Connection error
+                    showMatchImageError(imgElement, 'Connection error', true);
+                });
+                
+            return;
+        }
+        
+        // Final fallback - show error
+        showMatchImageError(imgElement, 'Failed to load image after multiple attempts');
+      }
+      
+      function showMatchImageError(imgElement, errorMessage, isConnectionError = false) {
+        // Hide the actual image
+        imgElement.style.display = 'none';
+        
+        const loadingDiv = imgElement.previousElementSibling;
+        let cssClass = 'image-error';
+        if (isConnectionError) cssClass += ' connection-error';
+        
+        loadingDiv.innerHTML = `
+          <i class='fas fa-exclamation-triangle fa-2x mb-2'></i>
+          <span>${errorMessage || 'Failed to load image'}</span>
+          <button class="retry-image-btn" onclick="retryMatchImage(this, '${imgElement.dataset.filename}')">
+            <i class="fas fa-sync-alt"></i> Retry
+          </button>
+        `;
+        loadingDiv.className = cssClass;
+        
+        // Log the error for debugging
+        console.warn(`Image error (${imgElement.dataset.filename}): ${errorMessage}`);
+      }
+      
+      // Function to retry loading an image
+      function retryMatchImage(btnElement, filename) {
+        const errorDiv = btnElement.parentElement;
+        const imgWrapper = errorDiv.parentElement;
+        const imgElement = imgWrapper.querySelector('img');
+        
+        // Reset error div to loading state
+        errorDiv.className = 'image-loading';
+        errorDiv.innerHTML = `
+          <div class="spinner-border text-primary mb-2" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          <span>Reloading image...</span>
+        `;
+        
+        // Reset image and try loading again with a fresh timestamp
+        imgElement.style.display = '';
+        imgElement.dataset.retried = '';
+        const timestamp = new Date().getTime();
+        imgElement.src = `/uploads/${filename}?retry=${timestamp}&r=${Math.random()}`;
+      }
+      
+      // Enhanced match form submission with better image handling
+      document.getElementById("matchForm").addEventListener("submit", async function(e) {
+          e.preventDefault();
+          const formData = new FormData(this);
+          
+          // Show loading animation
+          const loadingAnimation = document.getElementById("loadingAnimation");
+          const matchResultDiv = document.getElementById("matchResult");
+          
+          loadingAnimation.classList.add("showing");
+          matchResultDiv.innerHTML = "";
+          
+          try {
+              const response = await fetch("/match_upload", {
+                  method: "POST",
+                  body: formData
+              });
+              
+              if (!response.ok) {
+                  throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+              }
+              
+              const res = await response.json();
+              
+              // Hide loading after a minimum time (for better UX)
+              setTimeout(() => {
+                  // Hide loading animation
+                  loadingAnimation.classList.remove("showing");
+                  
+                  if(res.error){
+                     matchResultDiv.innerHTML = `<div class="alert alert-danger">${res.error}</div>`;
+                     return;
+                  }
+                  const newItem = res.matched.new_item;
+                  const bestMatch = res.matched.best_match;
+                  
+                  const container = document.createElement('div');
+                  container.className = "comparison-container";
+                  
+                  const newDiv = document.createElement('div');
+                  newDiv.className = "item";
+                  newDiv.innerHTML = `
+                    <h3 class="item-header">New Item</h3>
+                    <div class="image-wrapper">
+                        <div class="image-loading">
+                            <div class="spinner-border text-primary mb-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span>Loading image...</span>
+                        </div>
+                        <img src="/uploads/${newItem.filename}?t=${new Date().getTime()}&r=${Math.random()}" 
+                             alt="New Item" 
+                             data-filename="${newItem.filename}"
+                             data-valid="true"
+                             onload="this.previousElementSibling.style.display='none';"
+                             onerror="handleMatchImageError(this, '${newItem.filename}')">
+                    </div>
+                    <ul class="property-list">
+                      <li><span class="property-name">Label:</span> <span class="property-value">${newItem.label}</span></li>
+                      <li><span class="property-name">Wearable:</span> <span class="property-value">${newItem.wearable}</span></li>
+                      <li><span class="property-name">Costume:</span> <span class="property-value">${newItem.costume}</span></li>
+                      <li><span class="property-name">Sex:</span> <span class="property-value">${newItem.sex}</span></li>
+                      <li>
+                        <span class="property-name">Color:</span> 
+                        <span class="property-value">
+                          <span class="color-sample" style="background-color:${newItem.color};"></span>
+                          ${newItem.color}
+                        </span>
+                      </li>
+                      <li><span class="property-name">Pattern:</span> <span class="property-value">${newItem.pattern}</span></li>
+                    </ul>
+                  `;
+                  
+                  const matchDiv = document.createElement('div');
+                  matchDiv.className = "item";
+                  if(bestMatch){
+                    matchDiv.innerHTML = `
+                      <h3 class="item-header">Best Match</h3>
+                      <div class="image-wrapper">
+                          <div class="image-loading">
+                              <div class="spinner-border text-primary mb-2" role="status">
+                                  <span class="visually-hidden">Loading...</span>
+                              </div>
+                              <span>Loading image...</span>
+                          </div>
+                          <img src="/uploads/${bestMatch.filename}?t=${new Date().getTime()}" 
+                               alt="Best Match" 
+                               data-filename="${bestMatch.filename}"
+                               onload="this.previousElementSibling.style.display='none';"
+                               onerror="handleMatchImageError(this, '${bestMatch.filename}')">
+                      </div>
+                      <ul class="property-list">
+                        <li><span class="property-name">Label:</span> <span class="property-value">${bestMatch.data.label}</span></li>
+                        <li><span class="property-name">Wearable:</span> <span class="property-value">${bestMatch.data.wearable}</span></li>
+                        <li><span class="property-name">Costume:</span> <span class="property-value">${bestMatch.data.costume}</span></li>
+                        <li><span class="property-name">Sex:</span> <span class="property-value">${bestMatch.data.sex}</span></li>
+                        <li>
+                          <span class="property-name">Color:</span> 
+                          <span class="property-value">
+                            <span class="color-sample" style="background-color:${bestMatch.data.color};"></span>
+                            ${bestMatch.data.color}
+                          </span>
+                        </li>
+                        <li><span class="property-name">Pattern:</span> <span class="property-value">${bestMatch.data.pattern}</span></li>
+                        <li><span class="property-name">Similarity Score:</span> <span class="property-value">${bestMatch.score.toFixed(2)}</span></li>
+                      </ul>
+                    `;
+                  } else {
+                    matchDiv.innerHTML = `<h3 class="item-header">No Matching Candidate Found</h3>`;
+                  }
+                  
+                  container.appendChild(newDiv);
+                  container.appendChild(matchDiv);
+                  matchResultDiv.appendChild(container);
+                  
+                  // Add reason in a separate container
+                  if(bestMatch && res.matched.reason) {
+                    const reasonContainer = document.createElement('div');
+                    reasonContainer.className = "reason-container fade-in";
+                    reasonContainer.innerHTML = `
+                      <h3>Why These Match Well</h3>
+                      <p>${res.matched.reason}</p>
+                    `;
+                    matchResultDiv.appendChild(reasonContainer);
+                  }
+                  
+                  // Validate the result images after display
+                  setTimeout(() => {
+                      validateAllDisplayedImages();
+                  }, 1500);
+                  
+              }, 800); // Minimum display time for loading animation
+          } catch (error) {
+              // Handle any errors
+              loadingAnimation.classList.remove("showing");
+              matchResultDiv.innerHTML = `<div class="alert alert-danger">An error occurred: ${error.message}</div>`;
+          }
+      });
+      
+      // Function to validate all currently displayed images
+      function validateAllDisplayedImages() {
+          document.querySelectorAll('img[data-filename]').forEach(img => {
+              if (img.complete && !img.naturalWidth) {
+                  // Image loaded but has no content - try to fix
+                  const filename = img.getAttribute('data-filename');
+                  if (filename) {
+                      handleMatchImageError(img, filename);
+                  }
+              }
+          });
+      }
+      
+      // Execute validation check when page loads
+      document.addEventListener('DOMContentLoaded', function() {
+          // Wait a short time for images to load, then check them
+          setTimeout(validateAllDisplayedImages, 1500);
+      });
+      
+      // Improved retry function with more aggressive cache busting
+      function retryMatchImage(btnElement, filename) {
+        const errorDiv = btnElement.parentElement;
+        const imgWrapper = errorDiv.parentElement;
+        const imgElement = imgWrapper.querySelector('img');
+        
+        // Reset error div to loading state
+        errorDiv.className = 'image-loading';
+        errorDiv.innerHTML = `
+          <div class="spinner-border text-primary mb-2" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          <span>Reloading image...</span>
+        `;
+        
+        // Reset image and try loading again with enhanced cache busting
+        imgElement.style.display = '';
+        imgElement.dataset.retried = '';
+        
+        // Force browser to get fresh content using multiple random values
+        const timestamp = new Date().getTime();
+        const random1 = Math.floor(Math.random() * 1000000);
+        const random2 = Math.floor(Math.random() * 1000000);
+        imgElement.src = `/uploads/${filename}?retry=${timestamp}&r1=${random1}&r2=${random2}`;
+        
+        // Log retry attempt
+        console.log(`Retrying image: ${filename}`);
+      }
   </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
