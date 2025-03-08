@@ -588,9 +588,18 @@ def validate_image(filename):
     except Exception as e:
         return jsonify({"valid": False, "error": str(e)})
 
+# Add new route for pose rigging visualization
+@app.route("/pose_rigging")
+def pose_rigging():
+    """Route for the MediaPipe pose rigging visualization"""
+    return render_template("pose_visualization.html")
+
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template("404.html"), 404
 
+# Modify the if __name__ == '__main__' block if needed
 if __name__ == '__main__':
+    print("Fashion application running with pose rigging feature at: http://127.0.0.1:5000/")
+    print("Access pose rigging visualization at: http://127.0.0.1:5000/pose_rigging")
     app.run(debug=True, threaded=True)

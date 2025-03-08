@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediaPipe Pose Rigging Visualization | Fashion Matching App</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <!-- Import MediaPipe libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  
+  <!-- Add navigation bar styling -->
+  <style>
+    .navbar {
+      background-color: #f8f9fa;
+      padding: 10px 20px;
+      margin-bottom: 20px;
+    }
+    .navbar a {
+      text-decoration: none;
+      color: #333;
+      margin-right: 15px;
+      font-weight: bold;
+    }
+    .navbar a:hover {
+      color: #007bff;
+    }
+    /* Additional styles for error messaging */
+    .error-message {
+      background-color: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+      display: none;
+    }
+    .warning-message {
+      background-color: #fff3cd;
+      color: #856404;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+      display: none;
+    }
+    .troubleshooting {
+      background-color: #e2f3fd;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+      display: none;
+    }
+    .troubleshooting h4 {
+      margin-top: 0;
+    }
+    .troubleshooting ul {
+      padding-left: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Add navigation bar -->
+  <div class="navbar">
+    <a href="{{ url_for('index') }}">Home</a>
+    <a href="{{ url_for('match_page') }}">Clothing Match</a>
+    <a href="{{ url_for('pose_rigging') }}" class="active">Pose Rigging</a>
+  </div>
+
+  <div class="container">
+    <h1>Enhanced MediaPipe Pose Rigging Visualization</h1>
+    
+    <div class="video-container">
+      <video class="input-video" width="640" height="480"></video>
+      <canvas class="output-canvas" width="640" height="480"></canvas>
+    </div>
+    
+    <div class="controls">
+      <button id="start-button" class="btn btn-primary">Start Camera</button>
+      <button id="stop-button" class="btn btn-danger" disabled>Stop Camera</button>
+      
+      <!-- Add error messages container -->
+      <div id="error-message" class="error-message"></div>
+      <div id="warning-message" class="warning-message"></div>
+    </div>
+    
+    <div class="description">
+      <h2>Color-coded body segments:</h2>
+      <ul>
+        <li><span class="color-box" style="background-color: rgb(0, 0, 255);"></span> Right arm</li>
+        <li><span class="color-box" style="background-color: rgb(0, 255, 0);"></span> Left arm</li>
+        <li><span class="color-box" style="background-color: rgb(255, 0, 0);"></span> Right leg</li>
+        <li><span class="color-box" style="background-color: rgb(0, 255, 255);"></span> Left leg</li>
+        <li><span class="color-box" style="background-color: rgb(255, 0, 255);"></span> Torso</li>
+        <li><span class="color-box" style="background-color: rgb(255, 255, 0);"></span> Face</li>
+      </ul>
+    </div>
+    
+    <div class="troubleshooting" id="troubleshooting">
+      <h4>Troubleshooting Tips:</h4>
+      <ul>
+        <li>Make sure your camera is properly connected and not being used by another application</li>
+        <li>Allow camera permissions when prompted by your browser</li>
+        <li>Try using a different browser (Chrome or Firefox recommended)</li>
+        <li>Make sure you're in a well-lit environment</li>
+        <li>Ensure you're visible in the frame from head to mid-thigh for best results</li>
+      </ul>
+    </div>
+    
+    <div class="integration-info">
+      <h3>How This Feature Helps With Fashion Matching</h3>
+      <p>The pose rigging visualization can help you:</p>
+      <ul>
+        <li>See how clothing might fit your body shape</li>
+        <li>Understand your body proportions for better clothing choices</li>
+        <li>Visualize movement patterns that affect how clothing will look in motion</li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/pose_rigging.js') }}"></script>
+  
+  <!-- Additional script for error handling -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Add event listener for camera errors
+      const videoElement = document.querySelector('.input-video');
+      const errorMessage = document.getElementById('error-message');
+      const warningMessage = document.getElementById('warning-message');
+      const troubleshooting = document.getElementById('troubleshooting');
+      
+      videoElement.addEventListener('error', function(e) {
+        console.error('Video element error:', e);
+        errorMessage.textContent = 'Camera access error: ' + (e.message || 'Could not access camera');
+        errorMessage.style.display = 'block';
+        troubleshooting.style.display = 'block';
+      });
+      
+      // Check browser compatibility
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        console.log('getUserMedia supported');
+      } else {
+        warningMessage.textContent = 'Your browser may not support camera access. Please use Chrome or Firefox.';
+        warningMessage.style.display = 'block';
+        troubleshooting.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
