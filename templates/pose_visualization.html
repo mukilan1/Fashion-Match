@@ -3,163 +3,452 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediaPipe Pose Rigging Visualization | Fashion Matching App</title>
-  <!-- Bootstrap and Font Awesome for consistent styling -->
+  <title>Motion Capture Studio | Fashion Matching App</title>
+  <!-- Bootstrap and Font Awesome -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  
-  <!-- Import MediaPipe libraries -->
+  <!-- MediaPipe libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   
   <style>
+    :root {
+      --primary-gradient: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+      --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      --accent-gradient: linear-gradient(135deg, #43cea2 0%, #185a9d 100%);
+      --dark-gradient: linear-gradient(135deg, #334d50 0%, #cbcaa5 100%);
+    }
+    
     body {
-      background-color: #f8f9fa;
       font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      padding-bottom: 50px;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 0 0 60px 0;
+      color: #333;
+      min-height: 100vh;
     }
     
     .header {
-      background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+      background: var(--primary-gradient);
       color: white;
       padding: 40px 0;
       margin-bottom: 30px;
+      position: relative;
+      overflow: hidden;
       text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     }
     
-    .video-section {
+    .header:before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect x="0" y="0" width="100" height="100" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/></svg>') repeat;
+      opacity: 0.3;
+    }
+    
+    .header h1 {
+      font-weight: 700;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 2;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .header p {
+      font-size: 1.2rem;
+      position: relative;
+      z-index: 2;
+    }
+    
+    .page-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    
+    /* Navigation Bar */
+    .nav-bar {
       background-color: white;
-      border-radius: 10px;
-      box-shadow: 0 4px 6px rgba(0,0,0,.05);
-      padding: 25px;
+      padding: 15px 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       margin-bottom: 30px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     
+    .nav-links {
+      display: flex;
+      gap: 5px;
+    }
+    
+    .nav-bar a {
+      text-decoration: none;
+      color: #555;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 15px;
+      border-radius: 8px;
+      transition: all 0.3s ease;
+    }
+    
+    .nav-bar a:hover {
+      background-color: #f8f9fa;
+      color: #2575fc;
+    }
+    
+    .nav-bar a.active {
+      background-color: #e9f0ff;
+      color: #2575fc;
+    }
+    
+    /* Video Card */
+    .video-card {
+      background-color: white;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+      position: relative;
+    }
+    
+    .video-header {
+      background: var(--accent-gradient);
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .video-header h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+    
+    .camera-status {
+      background-color: rgba(255,255,255,0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: #dc3545;
+    }
+    
+    .status-dot.active {
+      background-color: #28a745;
+      box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.4);
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 6px rgba(40, 167, 69, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+      }
+    }
+    
+    /* Video Container */
     .video-container {
       position: relative;
-      margin: 20px auto;
       width: 100%;
-      max-width: 640px;
-      height: auto;
-      aspect-ratio: 4/3;
-      border-radius: 10px;
+      height: 0;
+      padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+      background-color: #000;
+      margin: 0 auto;
       overflow: hidden;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      max-width: 800px;
+      transition: all 0.3s ease;
     }
     
     .input-video {
       position: absolute;
-      width: 100%;
-      height: 100%;
       display: none;
     }
     
     .output-canvas {
       position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      border-radius: 10px;
+      background-color: #000;
+      object-fit: contain;
     }
     
+    /* Loading Overlay */
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      transition: opacity 0.5s ease;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+    
+    .loading-overlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+    
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+      margin-bottom: 15px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Controls */
     .controls {
       display: flex;
       flex-wrap: wrap;
-      justify-content: center;
       gap: 15px;
-      margin: 25px 0;
+      padding: 20px;
+      background-color: #f8f9fa;
+      border-bottom-left-radius: 15px;
+      border-bottom-right-radius: 15px;
+      justify-content: center;
     }
     
-    .btn-control {
-      padding: 12px 25px;
+    .btn-camera {
+      padding: 12px 24px;
+      font-size: 1rem;
+      border-radius: 50px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
       font-weight: 500;
-      border-radius: 30px;
       box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      transition: transform 0.2s, box-shadow 0.2s;
+      min-width: 150px;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
     }
     
-    .btn-control:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+    .btn-camera::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: 0.5s;
+    }
+    
+    .btn-camera:hover::before {
+      left: 100%;
     }
     
     .btn-start {
-      background: linear-gradient(135deg, #4a90e2 0%, #2575fc 100%);
-      border: none;
+      background: var(--primary-gradient);
       color: white;
+      border: none;
     }
     
     .btn-stop {
-      background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
-      border: none;
+      background: var(--secondary-gradient);
       color: white;
+      border: none;
+      opacity: 0.8;
     }
     
-    .btn-control:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
+    .btn-stop:not(:disabled):hover {
+      opacity: 1;
+      transform: translateY(-2px);
     }
     
-    .status-container {
-      background-color: #f8f9fa;
+    .btn-camera:not(:disabled):hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    
+    .btn-camera:active:not(:disabled) {
+      transform: translateY(1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .status-message {
+      background-color: #f1f1f1;
       border-radius: 8px;
-      padding: 10px 15px;
+      padding: 12px 15px;
       margin-top: 15px;
-      text-align: center;
-      font-size: 14px;
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+      width: 100%;
+      color: #555;
+      transition: background-color 0.3s ease, color 0.3s ease;
     }
     
+    .status-message.success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .status-message.error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .status-message.warning {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    
+    /* Info Cards */
     .info-card {
       background-color: white;
-      border-radius: 10px;
-      box-shadow: 0 4px 6px rgba(0,0,0,.05);
-      padding: 25px;
-      margin-bottom: 20px;
-      transition: transform 0.2s;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      height: 100%;
     }
     
     .info-card:hover {
       transform: translateY(-5px);
-      box-shadow: 0 8px 15px rgba(0,0,0,.1);
+      box-shadow: 0 15px 35px rgba(0,0,0,0.15);
     }
     
-    .info-card h2, .info-card h3 {
-      color: #444;
-      margin-bottom: 20px;
-      border-bottom: 2px solid #f0f0f0;
-      padding-bottom: 10px;
+    .info-header {
+      background: var(--dark-gradient);
+      color: white;
+      padding: 15px 20px;
     }
     
+    .info-header h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+    
+    .info-body {
+      padding: 20px;
+    }
+    
+    /* Color Grid */
     .color-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 15px;
     }
     
     .color-item {
       display: flex;
       align-items: center;
-      margin-bottom: 10px;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      background-color: #f8f9fa;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .color-item:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
     }
     
     .color-box {
-      display: inline-block;
-      width: 25px;
-      height: 25px;
-      margin-right: 10px;
-      border-radius: 6px;
-      border: 1px solid rgba(0,0,0,0.1);
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
     }
     
+    .color-box::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(0,0,0,0.1) 100%);
+    }
+    
+    .color-name {
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+    
+    /* Features List */
+    .features-list {
+      padding-left: 5px;
+      list-style-type: none;
+    }
+    
+    .features-list li {
+      position: relative;
+      padding-left: 25px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+    }
+    
+    .features-list li i {
+      position: absolute;
+      left: 0;
+      top: 5px;
+      color: #3498db;
+    }
+    
+    /* Error and Warning Messages */
     .error-message, .warning-message {
       padding: 15px;
-      border-radius: 8px;
+      border-radius: 10px;
       margin-top: 20px;
       text-align: center;
       display: none;
+      animation: fadeIn 0.5s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     
     .error-message {
@@ -174,170 +463,414 @@
       border: 1px solid #ffeeba;
     }
     
+    /* Troubleshooting */
     .troubleshooting {
       background-color: #e2f3fd;
       padding: 20px;
-      border-radius: 10px;
+      border-radius: 15px;
       margin-top: 25px;
       display: none;
+      animation: fadeIn 0.5s ease;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }
     
     .troubleshooting h4 {
       color: #0c5460;
       margin-top: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
       margin-bottom: 15px;
     }
     
     .troubleshooting ul {
       padding-left: 20px;
+      margin-bottom: 0;
     }
     
     .troubleshooting li {
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+      position: relative;
+      padding-left: 5px;
     }
     
+    /* FPS Counter */
+    .fps-counter {
+      background-color: rgba(0,0,0,0.7);
+      color: white;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .fps-counter.show {
+      opacity: 1;
+    }
+    
+    /* Fullscreen Button */
+    .fullscreen-btn {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 18px;
+      opacity: 0.7;
+      transition: opacity 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .fullscreen-btn:hover {
+      opacity: 1;
+    }
+    
+    /* Fullscreen Mode */
+    .video-container.fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      padding-bottom: 0;
+      z-index: 10000;
+      max-width: none;
+      background-color: black;
+    }
+    
+    .exit-fullscreen-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 10001;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s;
+    }
+    
+    .video-container.fullscreen .exit-fullscreen-btn {
+      display: flex;
+    }
+    
+    .exit-fullscreen-btn:hover {
+      background-color: rgba(255, 0, 0, 0.7);
+    }
+    
+    .fullscreen-overlay {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 15px;
+      border-radius: 4px;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 0.5s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    
+    .video-container.fullscreen .fullscreen-overlay {
+      opacity: 1;
+      animation: fade-out 3s forwards;
+    }
+    
+    @keyframes fade-out {
+      0%, 50% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    
+    /* Responsive Design */
     @media (max-width: 768px) {
-      .video-container {
-        aspect-ratio: 3/4;
-        height: auto;
-      }
       .color-grid {
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      }
+      
+      .controls {
+        flex-direction: column;
+        padding: 15px;
+      }
+      
+      .btn-camera {
+        width: 100%;
+      }
+      
+      .nav-links {
+        flex-wrap: wrap;
+      }
+      
+      .video-container {
+        padding-bottom: 75%; /* 4:3 for mobile */
+      }
+    }
+    
+    @media (max-width: 576px) {
+      .header {
+        padding: 30px 0;
+      }
+      
+      .header h1 {
+        font-size: 1.8rem;
+      }
+      
+      .video-header h2 {
+        font-size: 1.2rem;
+      }
+      
+      .info-header h2 {
+        font-size: 1.2rem;
       }
     }
   </style>
 </head>
-
 <body>
   <div class="header">
     <div class="container">
-      <h1><i class="fas fa-user-alt"></i> Pose Rigging Visualization</h1>
-      <p class="lead">See how your body moves in real-time with enhanced skeletal tracking</p>
+      <h1><i class="fas fa-user-alt"></i> Motion Capture Studio</h1>
+      <p class="lead">Visualize your body movement with enhanced 3D skeletal tracking</p>
     </div>
   </div>
 
-  <div class="container">
-    <!-- Navigation Buttons -->
-    <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-4">
-      <a href="/" class="btn btn-outline-secondary me-2">
-        <i class="fas fa-home"></i> Home
-      </a>
-      <a href="/match" class="btn btn-outline-primary">
-        <i class="fas fa-magic"></i> Clothing Match
-      </a>
+  <div class="page-container">
+    <!-- Navigation Bar -->
+    <div class="nav-bar">
+      <div class="nav-links">
+        <a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Home</a>
+        <a href="{{ url_for('match_page') }}"><i class="fas fa-tshirt"></i> Clothing Match</a>
+        <a href="{{ url_for('pose_rigging') }}" class="active"><i class="fas fa-user-alt"></i> Motion Studio</a>
+      </div>
     </div>
     
-    <div class="video-section">
-      <h2 class="text-center mb-4"><i class="fas fa-camera"></i> Live Pose Detection</h2>
+    <!-- Main Video Card -->
+    <div class="video-card">
+      <div class="video-header">
+        <h2><i class="fas fa-camera"></i> Live Pose Detection</h2>
+        <div class="camera-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Camera Off</span>
+        </div>
+      </div>
       
-      <div class="video-container">
+      <div class="video-container" id="video-container">
         <video class="input-video"></video>
         <canvas class="output-canvas"></canvas>
+        <div class="loading-overlay" id="loading-overlay">
+          <div class="spinner"></div>
+          <p>Initializing pose detection...</p>
+        </div>
+        <div class="fps-counter" id="fps-counter">
+          <i class="fas fa-tachometer-alt"></i>
+          <span id="fps-text">0 FPS</span>
+        </div>
+        <button class="fullscreen-btn" id="fullscreen-btn">
+          <i class="fas fa-expand"></i>
+        </button>
+        <button class="exit-fullscreen-btn" id="exit-fullscreen-btn">
+          <i class="fas fa-times"></i>
+        </button>
+        <div class="fullscreen-overlay" id="fullscreen-overlay">
+          Press ESC or click X to exit fullscreen
+        </div>
       </div>
       
       <div class="controls">
-        <button id="start-button" class="btn btn-control btn-start">
-          <i class="fas fa-play me-2"></i> Start Camera
+        <button id="start-button" class="btn-camera btn-start">
+          <i class="fas fa-play"></i> Start Camera
         </button>
-        <button id="stop-button" class="btn btn-control btn-stop" disabled>
-          <i class="fas fa-stop me-2"></i> Stop Camera
+        <button id="stop-button" class="btn-camera btn-stop" disabled>
+          <i class="fas fa-stop"></i> Stop Camera
         </button>
-      </div>
-      
-      <div id="status-container" class="status-container">
-        <i class="fas fa-info-circle me-2"></i> Ready to start pose detection
-      </div>
-      
-      <!-- Error and warning messages -->
-      <div id="error-message" class="error-message">
-        <i class="fas fa-exclamation-circle me-2"></i>
-        <span id="error-text">Error message will appear here</span>
-      </div>
-      
-      <div id="warning-message" class="warning-message">
-        <i class="fas fa-exclamation-triangle me-2"></i>
-        <span id="warning-text">Warning message will appear here</span>
+        <div class="status-message" id="status-message">
+          <i class="fas fa-info-circle"></i>
+          <span>Ready to start pose detection</span>
+        </div>
       </div>
     </div>
     
-    <div class="row">
-      <div class="col-md-6 mb-4">
+    <div class="row g-4">
+      <div class="col-md-6">
         <div class="info-card">
-          <h2><i class="fas fa-palette"></i> Color-coded Body Segments</h2>
-          <div class="color-grid">
-            <div class="color-item">
-              <span class="color-box" style="background-color: rgb(0, 0, 255);"></span>
-              <span>Right arm</span>
-            </div>
-            <div class="color-item">
-              <span class="color-box" style="background-color: rgb(0, 255, 0);"></span>
-              <span>Left arm</span>
-            </div>
-            <div class="color-item">
-              <span class="color-box" style="background-color: rgb(255, 0, 0);"></span>
-              <span>Right leg</span>
-            </div>
-            <div class="color-item">
-              <span class="color-box" style="background-color: rgb(0, 255, 255);"></span>
-              <span>Left leg</span>
-            </div>
-            <div class="color-item">
-              <span class="color-box" style="background-color: rgb(255, 0, 255);"></span>
-              <span>Torso</span>
-            </div>
-            <div class="color-item">
-              <span class="color-box" style="background-color: rgb(255, 255, 0);"></span>
-              <span>Face</span>
+          <div class="info-header">
+            <h2><i class="fas fa-palette"></i> Color Legend</h2>
+          </div>
+          <div class="info-body">
+            <div class="color-grid">
+              <div class="color-item">
+                <span class="color-box" style="background: #3498db;"></span>
+                <span class="color-name">Right Arm</span>
+              </div>
+              <div class="color-item">
+                <span class="color-box" style="background: #2ecc71;"></span>
+                <span class="color-name">Left Arm</span>
+              </div>
+              <div class="color-item">
+                <span class="color-box" style="background: #e74c3c;"></span>
+                <span class="color-name">Right Leg</span>
+              </div>
+              <div class="color-item">
+                <span class="color-box" style="background: #9b59b6;"></span>
+                <span class="color-name">Left Leg</span>
+              </div>
+              <div class="color-item">
+                <span class="color-box" style="background: #1abc9c;"></span>
+                <span class="color-name">Torso</span>
+              </div>
+              <div class="color-item">
+                <span class="color-box" style="background: #f1c40f;"></span>
+                <span class="color-name">Face</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
       
-      <div class="col-md-6 mb-4">
+      <div class="col-md-6">
         <div class="info-card">
-          <h3><i class="fas fa-tshirt"></i> How This Helps With Fashion</h3>
-          <p>The pose rigging visualization can help you:</p>
-          <ul>
-            <li>See how clothing might fit your body shape</li>
-            <li>Understand your body proportions for better clothing choices</li>
-            <li>Visualize movement patterns that affect how clothing will look in motion</li>
-            <li>Get a better sense of your posture for improved style</li>
-          </ul>
+          <div class="info-header">
+            <h2><i class="fas fa-tshirt"></i> Fashion Application</h2>
+          </div>
+          <div class="info-body">
+            <p>This motion capture technology enhances your fashion experience by:</p>
+            <ul class="features-list">
+              <li><i class="fas fa-ruler"></i> Providing accurate body measurements for better clothing fit</li>
+              <li><i class="fas fa-tshirt"></i> Visualizing how clothing moves with your body</li>
+              <li><i class="fas fa-user-check"></i> Understanding your posture and body proportions</li>
+              <li><i class="fas fa-walking"></i> Analyzing your movement patterns for style recommendations</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
     
+    <!-- Error and warning messages -->
+    <div id="error-message" class="error-message">
+      <i class="fas fa-exclamation-circle me-2"></i>
+      <span id="error-text">Error message will appear here</span>
+    </div>
+    
+    <div id="warning-message" class="warning-message">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <span id="warning-text">Warning message will appear here</span>
+    </div>
+    
     <div class="troubleshooting" id="troubleshooting">
-      <h4><i class="fas fa-wrench me-2"></i>Troubleshooting Tips</h4>
+      <h4><i class="fas fa-tools"></i> Troubleshooting Tips</h4>
       <ul>
         <li>Make sure your camera is properly connected and not being used by another application</li>
         <li>Allow camera permissions when prompted by your browser</li>
         <li>Try using a different browser (Chrome or Firefox recommended)</li>
         <li>Make sure you're in a well-lit environment</li>
         <li>Ensure you're visible in the frame from head to mid-thigh for best results</li>
+        <li>If the detection is slow, try reducing background clutter</li>
       </ul>
     </div>
   </div>
 
+  <!-- JavaScript -->
   <script src="{{ url_for('static', filename='js/pose_rigging.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/fullscreen.js') }}"></script>
   
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Set the status container for the pose_rigging.js script
-      window.statusContainer = document.getElementById('status-container');
-      
-      // Add event listener for camera errors
+      // Reference to elements
       const videoElement = document.querySelector('.input-video');
       const errorMessage = document.getElementById('error-message');
       const errorText = document.getElementById('error-text');
       const warningMessage = document.getElementById('warning-message');
       const warningText = document.getElementById('warning-text');
       const troubleshooting = document.getElementById('troubleshooting');
+      const loadingOverlay = document.getElementById('loading-overlay');
+      const statusDot = document.getElementById('status-dot');
+      const statusText = document.getElementById('status-text');
+      const fpsCounter = document.getElementById('fps-counter');
       
+      // Show loading overlay while initializing
+      loadingOverlay.classList.add('show');
+      
+      // Create a global object to manage UI updates from pose_rigging.js
+      window.PoseUI = {
+        setStatus: function(status, type = 'info') {
+          const statusMessage = document.getElementById('status-message');
+          const messageSpan = statusMessage.querySelector('span');
+          const icon = statusMessage.querySelector('i');
+          
+          // Update message
+          messageSpan.textContent = status;
+          
+          // Reset classes
+          statusMessage.className = 'status-message';
+          icon.className = 'fas';
+          
+          // Apply styling based on status type
+          switch (type) {
+            case 'success':
+              statusMessage.classList.add('success');
+              icon.classList.add('fa-check-circle');
+              statusDot.classList.add('active');
+              statusText.textContent = 'Camera Active';
+              break;
+            case 'error':
+              statusMessage.classList.add('error');
+              icon.classList.add('fa-exclamation-circle');
+              statusDot.classList.remove('active');
+              statusText.textContent = 'Error';
+              break;
+            case 'warning':
+              statusMessage.classList.add('warning');
+              icon.classList.add('fa-exclamation-triangle');
+              statusDot.classList.remove('active');
+              statusText.textContent = 'Warning';
+              break;
+            default:
+              icon.classList.add('fa-info-circle');
+              statusDot.classList.remove('active');
+              statusText.textContent = 'Camera Off';
+          }
+        },
+        updateFPS: function(fps) {
+          const fpsText = document.getElementById('fps-text');
+          fpsText.textContent = `${fps.toFixed(1)} FPS`;
+          if (!fpsCounter.classList.contains('show')) {
+            fpsCounter.classList.add('show');
+          }
+        },
+        hideLoading: function() {
+          loadingOverlay.classList.remove('show');
+        }
+      };
+      
+      // Add event listener for camera errors
       videoElement.addEventListener('error', function(e) {
         console.error('Video element error:', e);
-        errorText.textContent = 'Camera access error: ' + (e.message || 'Could not access camera');
         errorMessage.style.display = 'block';
+        errorText.textContent = 'Camera access error: ' + (e.message || 'Could not access camera');
+        loadingOverlay.classList.remove('show');
         troubleshooting.style.display = 'block';
       });
       
@@ -345,13 +878,17 @@
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         console.log('getUserMedia supported');
       } else {
-        warningText.textContent = 'Your browser may not fully support camera access. Please use Chrome or Firefox.';
         warningMessage.style.display = 'block';
+        warningText.textContent = 'Your browser may not support camera access. Please use Chrome or Firefox.';
         troubleshooting.style.display = 'block';
+        loadingOverlay.classList.remove('show');
       }
+      
+      // Hide loading overlay if it takes too long (fallback)
+      setTimeout(() => {
+        loadingOverlay.classList.remove('show');
+      }, 5000);
     });
   </script>
-  
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
