@@ -4,100 +4,311 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MediaPipe Pose Rigging Visualization | Fashion Matching App</title>
+  <!-- Bootstrap and Font Awesome for consistent styling -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  
   <!-- Import MediaPipe libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   
-  <!-- Add navigation bar styling -->
   <style>
-    .navbar {
+    body {
       background-color: #f8f9fa;
-      padding: 10px 20px;
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      padding-bottom: 50px;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+      color: white;
+      padding: 40px 0;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    
+    .video-section {
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,.05);
+      padding: 25px;
+      margin-bottom: 30px;
+    }
+    
+    .video-container {
+      position: relative;
+      margin: 20px auto;
+      width: 100%;
+      max-width: 640px;
+      height: auto;
+      aspect-ratio: 4/3;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .input-video {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+    
+    .output-canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+    }
+    
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      margin: 25px 0;
+    }
+    
+    .btn-control {
+      padding: 12px 25px;
+      font-weight: 500;
+      border-radius: 30px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .btn-control:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+    }
+    
+    .btn-start {
+      background: linear-gradient(135deg, #4a90e2 0%, #2575fc 100%);
+      border: none;
+      color: white;
+    }
+    
+    .btn-stop {
+      background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+      border: none;
+      color: white;
+    }
+    
+    .btn-control:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .status-container {
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      padding: 10px 15px;
+      margin-top: 15px;
+      text-align: center;
+      font-size: 14px;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .info-card {
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,.05);
+      padding: 25px;
       margin-bottom: 20px;
+      transition: transform 0.2s;
     }
-    .navbar a {
-      text-decoration: none;
-      color: #333;
-      margin-right: 15px;
-      font-weight: bold;
+    
+    .info-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 15px rgba(0,0,0,.1);
     }
-    .navbar a:hover {
-      color: #007bff;
+    
+    .info-card h2, .info-card h3 {
+      color: #444;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #f0f0f0;
+      padding-bottom: 10px;
     }
-    /* Additional styles for error messaging */
+    
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 15px;
+    }
+    
+    .color-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .color-box {
+      display: inline-block;
+      width: 25px;
+      height: 25px;
+      margin-right: 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+    
+    .error-message, .warning-message {
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      text-align: center;
+      display: none;
+    }
+    
     .error-message {
       background-color: #f8d7da;
       color: #721c24;
-      padding: 10px;
-      border-radius: 5px;
-      margin-top: 10px;
-      display: none;
+      border: 1px solid #f5c6cb;
     }
+    
     .warning-message {
       background-color: #fff3cd;
       color: #856404;
-      padding: 10px;
-      border-radius: 5px;
-      margin-top: 10px;
-      display: none;
+      border: 1px solid #ffeeba;
     }
+    
     .troubleshooting {
       background-color: #e2f3fd;
-      padding: 15px;
-      border-radius: 5px;
-      margin-top: 20px;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 25px;
       display: none;
     }
+    
     .troubleshooting h4 {
+      color: #0c5460;
       margin-top: 0;
+      margin-bottom: 15px;
     }
+    
     .troubleshooting ul {
       padding-left: 20px;
     }
+    
+    .troubleshooting li {
+      margin-bottom: 8px;
+    }
+    
+    @media (max-width: 768px) {
+      .video-container {
+        aspect-ratio: 3/4;
+        height: auto;
+      }
+      .color-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      }
+    }
   </style>
 </head>
+
 <body>
-  <!-- Add navigation bar -->
-  <div class="navbar">
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('match_page') }}">Clothing Match</a>
-    <a href="{{ url_for('pose_rigging') }}" class="active">Pose Rigging</a>
+  <div class="header">
+    <div class="container">
+      <h1><i class="fas fa-user-alt"></i> Pose Rigging Visualization</h1>
+      <p class="lead">See how your body moves in real-time with enhanced skeletal tracking</p>
+    </div>
   </div>
 
   <div class="container">
-    <h1>Enhanced MediaPipe Pose Rigging Visualization</h1>
-    
-    <div class="video-container">
-      <video class="input-video" width="640" height="480"></video>
-      <canvas class="output-canvas" width="640" height="480"></canvas>
+    <!-- Navigation Buttons -->
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-4">
+      <a href="/" class="btn btn-outline-secondary me-2">
+        <i class="fas fa-home"></i> Home
+      </a>
+      <a href="/match" class="btn btn-outline-primary">
+        <i class="fas fa-magic"></i> Clothing Match
+      </a>
     </div>
     
-    <div class="controls">
-      <button id="start-button" class="btn btn-primary">Start Camera</button>
-      <button id="stop-button" class="btn btn-danger" disabled>Stop Camera</button>
+    <div class="video-section">
+      <h2 class="text-center mb-4"><i class="fas fa-camera"></i> Live Pose Detection</h2>
       
-      <!-- Add error messages container -->
-      <div id="error-message" class="error-message"></div>
-      <div id="warning-message" class="warning-message"></div>
+      <div class="video-container">
+        <video class="input-video"></video>
+        <canvas class="output-canvas"></canvas>
+      </div>
+      
+      <div class="controls">
+        <button id="start-button" class="btn btn-control btn-start">
+          <i class="fas fa-play me-2"></i> Start Camera
+        </button>
+        <button id="stop-button" class="btn btn-control btn-stop" disabled>
+          <i class="fas fa-stop me-2"></i> Stop Camera
+        </button>
+      </div>
+      
+      <div id="status-container" class="status-container">
+        <i class="fas fa-info-circle me-2"></i> Ready to start pose detection
+      </div>
+      
+      <!-- Error and warning messages -->
+      <div id="error-message" class="error-message">
+        <i class="fas fa-exclamation-circle me-2"></i>
+        <span id="error-text">Error message will appear here</span>
+      </div>
+      
+      <div id="warning-message" class="warning-message">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        <span id="warning-text">Warning message will appear here</span>
+      </div>
     </div>
     
-    <div class="description">
-      <h2>Color-coded body segments:</h2>
-      <ul>
-        <li><span class="color-box" style="background-color: rgb(0, 0, 255);"></span> Right arm</li>
-        <li><span class="color-box" style="background-color: rgb(0, 255, 0);"></span> Left arm</li>
-        <li><span class="color-box" style="background-color: rgb(255, 0, 0);"></span> Right leg</li>
-        <li><span class="color-box" style="background-color: rgb(0, 255, 255);"></span> Left leg</li>
-        <li><span class="color-box" style="background-color: rgb(255, 0, 255);"></span> Torso</li>
-        <li><span class="color-box" style="background-color: rgb(255, 255, 0);"></span> Face</li>
-      </ul>
+    <div class="row">
+      <div class="col-md-6 mb-4">
+        <div class="info-card">
+          <h2><i class="fas fa-palette"></i> Color-coded Body Segments</h2>
+          <div class="color-grid">
+            <div class="color-item">
+              <span class="color-box" style="background-color: rgb(0, 0, 255);"></span>
+              <span>Right arm</span>
+            </div>
+            <div class="color-item">
+              <span class="color-box" style="background-color: rgb(0, 255, 0);"></span>
+              <span>Left arm</span>
+            </div>
+            <div class="color-item">
+              <span class="color-box" style="background-color: rgb(255, 0, 0);"></span>
+              <span>Right leg</span>
+            </div>
+            <div class="color-item">
+              <span class="color-box" style="background-color: rgb(0, 255, 255);"></span>
+              <span>Left leg</span>
+            </div>
+            <div class="color-item">
+              <span class="color-box" style="background-color: rgb(255, 0, 255);"></span>
+              <span>Torso</span>
+            </div>
+            <div class="color-item">
+              <span class="color-box" style="background-color: rgb(255, 255, 0);"></span>
+              <span>Face</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6 mb-4">
+        <div class="info-card">
+          <h3><i class="fas fa-tshirt"></i> How This Helps With Fashion</h3>
+          <p>The pose rigging visualization can help you:</p>
+          <ul>
+            <li>See how clothing might fit your body shape</li>
+            <li>Understand your body proportions for better clothing choices</li>
+            <li>Visualize movement patterns that affect how clothing will look in motion</li>
+            <li>Get a better sense of your posture for improved style</li>
+          </ul>
+        </div>
+      </div>
     </div>
     
     <div class="troubleshooting" id="troubleshooting">
-      <h4>Troubleshooting Tips:</h4>
+      <h4><i class="fas fa-wrench me-2"></i>Troubleshooting Tips</h4>
       <ul>
         <li>Make sure your camera is properly connected and not being used by another application</li>
         <li>Allow camera permissions when prompted by your browser</li>
@@ -106,32 +317,26 @@
         <li>Ensure you're visible in the frame from head to mid-thigh for best results</li>
       </ul>
     </div>
-    
-    <div class="integration-info">
-      <h3>How This Feature Helps With Fashion Matching</h3>
-      <p>The pose rigging visualization can help you:</p>
-      <ul>
-        <li>See how clothing might fit your body shape</li>
-        <li>Understand your body proportions for better clothing choices</li>
-        <li>Visualize movement patterns that affect how clothing will look in motion</li>
-      </ul>
-    </div>
   </div>
 
   <script src="{{ url_for('static', filename='js/pose_rigging.js') }}"></script>
   
-  <!-- Additional script for error handling -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      // Set the status container for the pose_rigging.js script
+      window.statusContainer = document.getElementById('status-container');
+      
       // Add event listener for camera errors
       const videoElement = document.querySelector('.input-video');
       const errorMessage = document.getElementById('error-message');
+      const errorText = document.getElementById('error-text');
       const warningMessage = document.getElementById('warning-message');
+      const warningText = document.getElementById('warning-text');
       const troubleshooting = document.getElementById('troubleshooting');
       
       videoElement.addEventListener('error', function(e) {
         console.error('Video element error:', e);
-        errorMessage.textContent = 'Camera access error: ' + (e.message || 'Could not access camera');
+        errorText.textContent = 'Camera access error: ' + (e.message || 'Could not access camera');
         errorMessage.style.display = 'block';
         troubleshooting.style.display = 'block';
       });
@@ -140,11 +345,13 @@
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         console.log('getUserMedia supported');
       } else {
-        warningMessage.textContent = 'Your browser may not support camera access. Please use Chrome or Firefox.';
+        warningText.textContent = 'Your browser may not fully support camera access. Please use Chrome or Firefox.';
         warningMessage.style.display = 'block';
         troubleshooting.style.display = 'block';
       }
     });
   </script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

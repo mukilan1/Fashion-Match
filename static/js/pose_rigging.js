@@ -3,19 +3,13 @@ const canvasElement = document.getElementsByClassName('output-canvas')[0];
 const canvasCtx = canvasElement.getContext('2d');
 const startButton = document.getElementById('start-button');
 const stopButton = document.getElementById('stop-button');
-const statusElement = document.createElement('div'); // Create status element for debugging
-
-// Add status element to the page
-document.querySelector('.controls').appendChild(statusElement);
-statusElement.style.marginTop = '10px';
-statusElement.style.padding = '5px';
-statusElement.style.backgroundColor = '#f8f9fa';
-statusElement.style.borderRadius = '4px';
-statusElement.style.fontSize = '14px';
+const statusContainer = document.getElementById('status-container');
 
 let camera = null;
 let poseRunning = false;
 let frameCount = 0;
+let lastFrameTime = 0;
+let fps = 0;
 
 // Define body part connections for custom drawing
 const bodyParts = {
@@ -73,10 +67,71 @@ const keyPoints = [
   'NOSE'
 ];
 
+// Update the status display with better UI
+function updateStatus(message, type = 'info') {
+  if (!statusContainer) return;
+  
+  // Remove any existing icon classes
+  statusContainer.innerHTML = '';
+  
+  // Create icon element
+  const icon = document.createElement('i');
+  icon.className = 'fas me-2 ';
+  
+  // Add appropriate icon and color based on message type
+  switch (type) {
+    case 'success':
+      icon.className += 'fa-check-circle';
+      statusContainer.style.color = '#28a745';
+      statusContainer.style.backgroundColor = '#d4edda';
+      break;
+    case 'error':
+      icon.className += 'fa-exclamation-circle';
+      statusContainer.style.color = '#721c24';
+      statusContainer.style.backgroundColor = '#f8d7da';
+      break;
+    case 'warning':
+      icon.className += 'fa-exclamation-triangle';
+      statusContainer.style.color = '#856404';
+      statusContainer.style.backgroundColor = '#fff3cd';
+      break;
+    case 'info':
+    default:
+      icon.className += 'fa-info-circle';
+      statusContainer.style.color = '#0c5460';
+      statusContainer.style.backgroundColor = '#d1ecf1';
+  }
+  
+  statusContainer.appendChild(icon);
+  
+  // Add message text
+  const textSpan = document.createElement('span');
+  textSpan.textContent = message;
+  statusContainer.appendChild(textSpan);
+  
+  // Add FPS counter if running
+  if (poseRunning && type === 'success' && fps > 0) {
+    const fpsSpan = document.createElement('span');
+    fpsSpan.className = 'badge bg-secondary ms-2';
+    fpsSpan.textContent = `${fps.toFixed(1)} FPS`;
+    statusContainer.appendChild(fpsSpan);
+  }
+}
+
 function onResults(results) {
+  // Calculate FPS
+  const now = performance.now();
+  if (lastFrameTime > 0) {
+    const delta = (now - lastFrameTime) / 1000;
+    fps = 0.9 * fps + 0.1 * (1 / delta); // Smooth the FPS calculation
+  }
+  lastFrameTime = now;
+  
   // Increment frame counter for debugging
   frameCount++;
-  statusElement.textContent = `Processed frames: ${frameCount}`;
+  if (frameCount % 30 === 0) {  // Update status every 30 frames for better performance
+    updateStatus(`Processing pose detection in real-time`, 'success');
+  }
   
   // Clear the canvas
   canvasCtx.save();
@@ -169,11 +224,12 @@ stopButton.addEventListener('click', () => {
 // Function to start the camera with proper error handling
 function startCamera() {
   try {
-    statusElement.textContent = "Starting camera...";
-    statusElement.style.color = "blue";
+    updateStatus("Starting camera and initializing pose detection...", 'info');
     
-    // Reset frame counter
+    // Reset counters
     frameCount = 0;
+    fps = 0;
+    lastFrameTime = 0;
     
     // Create camera instance if it doesn't exist
     if (!camera) {
@@ -183,8 +239,7 @@ function startCamera() {
             await pose.send({image: videoElement});
           } catch (error) {
             console.error("Error in pose detection:", error);
-            statusElement.textContent = `Error: ${error.message}`;
-            statusElement.style.color = "red";
+            updateStatus(`Error: ${error.message}`, 'error');
           }
         },
         width: 640,
@@ -192,25 +247,34 @@ function startCamera() {
       });
     }
     
+    // Add loading animation
+    startButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+    startButton.disabled = true;
+    
     // Start the camera with promise handling
     camera.start()
       .then(() => {
         console.log("Camera started successfully");
         poseRunning = true;
+        startButton.innerHTML = '<i class="fas fa-play me-2"></i> Start Camera';
         startButton.disabled = true;
         stopButton.disabled = false;
-        statusElement.textContent = "Camera running - processing frames...";
-        statusElement.style.color = "green";
+        updateStatus("Camera running - Move around to see the pose tracking", 'success');
       })
       .catch(error => {
         console.error("Failed to start camera:", error);
-        statusElement.textContent = `Camera error: ${error.message}`;
-        statusElement.style.color = "red";
+        startButton.innerHTML = '<i class="fas fa-play me-2"></i> Start Camera';
+        startButton.disabled = false;
+        updateStatus(`Camera error: ${error.message}`, 'error');
+        
+        // Show troubleshooting tips
+        document.getElementById('troubleshooting').style.display = 'block';
       });
   } catch (error) {
     console.error("Error starting camera:", error);
-    statusElement.textContent = `Setup error: ${error.message}`;
-    statusElement.style.color = "red";
+    startButton.innerHTML = '<i class="fas fa-play me-2"></i> Start Camera';
+    startButton.disabled = false;
+    updateStatus(`Setup error: ${error.message}`, 'error');
   }
 }
 
@@ -221,12 +285,10 @@ function stopCamera() {
     poseRunning = false;
     startButton.disabled = false;
     stopButton.disabled = true;
-    statusElement.textContent = `Camera stopped. Processed ${frameCount} frames`;
-    statusElement.style.color = "blue";
+    updateStatus(`Camera stopped. Processed ${frameCount} frames`, 'info');
   } catch (error) {
     console.error("Error stopping camera:", error);
-    statusElement.textContent = `Stop error: ${error.message}`;
-    statusElement.style.color = "red";
+    updateStatus(`Stop error: ${error.message}`, 'error');
   }
 }
 
@@ -237,8 +299,7 @@ document.addEventListener('visibilitychange', () => {
     if (camera) {
       try {
         camera.stop();
-        statusElement.textContent = "Camera paused (page hidden)";
-        statusElement.style.color = "orange";
+        updateStatus("Camera paused (page hidden)", 'warning');
       } catch (e) {
         console.log("Error pausing camera:", e);
       }
@@ -249,17 +310,20 @@ document.addEventListener('visibilitychange', () => {
       try {
         camera.start()
           .then(() => {
-            statusElement.textContent = "Camera resumed - processing frames...";
-            statusElement.style.color = "green";
+            updateStatus("Camera resumed - processing frames...", 'success');
           })
           .catch(e => {
             console.error("Failed to resume camera:", e);
-            statusElement.textContent = `Resume error: ${e.message}`;
-            statusElement.style.color = "red";
+            updateStatus(`Resume error: ${e.message}`, 'error');
           });
       } catch (e) {
         console.error("Error resuming camera:", e);
       }
     }
   }
+});
+
+// Initialize the status display
+document.addEventListener('DOMContentLoaded', function() {
+  updateStatus('Ready to start pose detection', 'info');
 });
