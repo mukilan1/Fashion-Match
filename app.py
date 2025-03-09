@@ -591,8 +591,81 @@ def validate_image(filename):
 # Add new route for pose rigging visualization
 @app.route("/pose_rigging")
 def pose_rigging():
-    """Route for the MediaPipe pose rigging visualization"""
-    return render_template("pose_visualization.html")
+    all_images = get_all_images()
+    return render_template('pose_visualization.html', images=all_images)
+
+# Update the get_all_images function to properly use the labels.json data
+
+def get_all_images():
+    """Retrieve all images from the database or storage.
+    This function serves as a central point for image retrieval across the application.
+    Returns a list of image objects/dictionaries with properties like filename, label, wearable, etc.
+    """
+    # First, try to use the labels.json file which has the correct metadata
+    labels = load_labels()
+    
+    # Get the list of actual files in the uploads directory
+    upload_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    files = os.listdir(upload_dir) if os.path.exists(upload_dir) else []
+    
+    images = []
+    for filename in files:
+        # Skip non-image files
+        if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+            continue
+            
+        # Get metadata from labels.json if available
+        entry = labels.get(filename, {})
+        
+        # Check if file exists and is a valid image
+        file_path = os.path.join(upload_dir, filename)
+        is_valid_image = os.path.exists(file_path)
+        
+        if is_valid_image:
+            try:
+                # Verify the image is valid
+                with Image.open(file_path) as img:
+                    img.verify()
+            except Exception:
+                is_valid_image = False
+        
+        # Get or determine label
+        label = entry.get("label", os.path.splitext(filename)[0])
+        
+        # Get wearable type
+        wearable = entry.get("wearable", "Unknown")
+        
+        # SPECIAL HANDLING FOR DRESS-LIKE ITEMS:
+        # Check if this item should be classified as a dress regardless of its current classification
+        label_lower = label.lower()
+        
+        # These are specific items that should be classified as dresses
+        dress_items = ['dress', 'gown', 'sarong', 'frock', 'skirt', 'lehenga', 'saree', 'sari']
+        
+        # For debugging: Mark all clothing items that match our dress keywords in the metadata
+        # This will help us identify these items in the UI
+        entry_dress_match = any(item in label_lower for item in dress_items)
+        
+        # Override wearable type for items that should be classified as dresses
+        if entry_dress_match:
+            # Set metadata to indicate this is a dress-like item
+            wearable = "dress"
+        
+        # Add the image data - with proper dress identification
+        images.append({
+            "filename": filename,
+            "label": label,
+            "wearable": wearable,
+            "costume": entry.get("costume", "Unknown"),
+            "color": entry.get("color", "#cccccc"),
+            "pattern": entry.get("pattern", "Unknown"),
+            "sex": entry.get("sex", "Unknown"),
+            "hand": entry.get("hand", "Unknown"),
+            "is_valid": is_valid_image,
+            "is_dress_item": entry_dress_match  # Add this flag to easily identify dress items in the template
+        })
+    
+    return images
 
 @app.errorhandler(404)
 def page_not_found(e):

@@ -1,268 +1,330 @@
-const videoElement = document.getElementsByClassName('input-video')[0];
-const canvasElement = document.getElementsByClassName('output-canvas')[0];
-const canvasCtx = canvasElement.getContext('2d');
-const startButton = document.getElementById('start-button');
-const stopButton = document.getElementById('stop-button');
-const statusElement = document.createElement('div'); // Create status element for debugging
+/**
+ * MediaPipe Pose Detection integration for fashion visualization
+ */
 
-// Add status element to the page
-document.querySelector('.controls').appendChild(statusElement);
-statusElement.style.marginTop = '10px';
-statusElement.style.padding = '5px';
-statusElement.style.backgroundColor = '#f8f9fa';
-statusElement.style.borderRadius = '4px';
-statusElement.style.fontSize = '14px';
-
-// Performance tracking
-let frameCount = 0;
-let lastFrameTime = 0;
-let fps = 0;
-let camera = null;
-let poseRunning = false;
-
-// Updated color palette with modern, visually appealing colors (in RGB format)
-const colors = {
-  'right_arm': 'rgb(52, 152, 219)',     // Blue
-  'left_arm': 'rgb(46, 204, 113)',      // Green
-  'right_leg': 'rgb(231, 76, 60)',      // Red
-  'left_leg': 'rgb(155, 89, 182)',      // Purple
-  'torso': 'rgb(26, 188, 156)',         // Teal
-  'face': 'rgb(241, 196, 15)'           // Yellow
-};
-
-// Define body part connections for custom drawing
-const bodyParts = {
-  'right_arm': [
-    ['RIGHT_SHOULDER', 'RIGHT_ELBOW'],
-    ['RIGHT_ELBOW', 'RIGHT_WRIST']
-  ],
-  'left_arm': [
-    ['LEFT_SHOULDER', 'LEFT_ELBOW'],
-    ['LEFT_ELBOW', 'LEFT_WRIST']
-  ],
-  'right_leg': [
-    ['RIGHT_HIP', 'RIGHT_KNEE'],
-    ['RIGHT_KNEE', 'RIGHT_ANKLE']
-  ],
-  'left_leg': [
-    ['LEFT_HIP', 'LEFT_KNEE'],
-    ['LEFT_KNEE', 'LEFT_ANKLE']
-  ],
-  'torso': [
-    ['LEFT_SHOULDER', 'RIGHT_SHOULDER'],
-    ['RIGHT_SHOULDER', 'RIGHT_HIP'],
-    ['RIGHT_HIP', 'LEFT_HIP'],
-    ['LEFT_HIP', 'LEFT_SHOULDER']
-  ],
-  'face': [
-    ['NOSE', 'LEFT_EYE_INNER'],
-    ['LEFT_EYE_INNER', 'LEFT_EYE'],
-    ['LEFT_EYE', 'LEFT_EYE_OUTER'],
-    ['NOSE', 'RIGHT_EYE_INNER'],
-    ['RIGHT_EYE_INNER', 'RIGHT_EYE'],
-    ['RIGHT_EYE', 'RIGHT_EYE_OUTER'],
-    ['MOUTH_LEFT', 'MOUTH_RIGHT']
-  ]
-};
-
-// Key points to draw larger circles
-const keyPoints = [
-  'LEFT_SHOULDER', 'RIGHT_SHOULDER',
-  'LEFT_ELBOW', 'RIGHT_ELBOW',
-  'LEFT_WRIST', 'RIGHT_WRIST',
-  'LEFT_HIP', 'RIGHT_HIP',
-  'LEFT_KNEE', 'RIGHT_KNEE',
-  'LEFT_ANKLE', 'RIGHT_ANKLE',
-  'NOSE'
-];
-
-function onResults(results) {
-  // Increment frame counter for debugging
-  frameCount++;
-  statusElement.textContent = `Processed frames: ${frameCount}`;
+document.addEventListener('DOMContentLoaded', function() {
+  // DOM elements
+  const videoElement = document.querySelector('.input-video');
+  const canvasElement = document.querySelector('.output-canvas');
+  const canvasCtx = canvasElement.getContext('2d');
+  const startButton = document.getElementById('start-button');
+  const stopButton = document.getElementById('stop-button');
   
-  // Clear the canvas
-  canvasCtx.save();
-  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+  // Pose detection variables
+  let pose;
+  let camera;
+  let lastFrameTime = 0;
+  let poseActive = false;
   
-  // Draw the video frame
-  canvasCtx.drawImage(
-    results.image, 0, 0, canvasElement.width, canvasElement.height);
-  
-  if (results.poseLandmarks) {
-    const landmarks = results.poseLandmarks;
+  // Initialize pose model
+  function initializePose() {
+    pose = new Pose({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+      }
+    });
     
-    // Draw custom colored body parts with thicker lines
-    for (const [part, connections] of Object.entries(bodyParts)) {
-      const color = colors[part];
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      smoothSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    
+    pose.onResults(onResults);
+    
+    if (window.PoseUI) {
+      window.PoseUI.hideLoading();
+    }
+  }
+  
+  // Handle pose detection results
+  function onResults(results) {
+    // Calculate FPS
+    const now = performance.now();
+    const deltaTime = now - lastFrameTime;
+    const fps = 1000 / deltaTime;
+    lastFrameTime = now;
+    
+    if (window.PoseUI && window.PoseUI.updateFPS) {
+      window.PoseUI.updateFPS(fps);
+    }
+    
+    // Draw results on canvas
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    
+    // Draw the video feed
+    canvasCtx.globalCompositeOperation = 'source-over';
+    canvasCtx.drawImage(
+      results.image, 0, 0, canvasElement.width, canvasElement.height);
       
-      for (const connection of connections) {
-        const start = landmarks[window.POSE_LANDMARKS[connection[0]]];
-        const end = landmarks[window.POSE_LANDMARKS[connection[1]]];
-        
-        if (start && end && start.visibility > 0.5 && end.visibility > 0.5) {
-          // Draw thicker lines
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(start.x * canvasElement.width, start.y * canvasElement.height);
-          canvasCtx.lineTo(end.x * canvasElement.width, end.y * canvasElement.height);
-          canvasCtx.lineWidth = 6;
-          canvasCtx.strokeStyle = color;
-          canvasCtx.stroke();
+    // Draw pose landmarks with our custom styling
+    if (results.poseLandmarks) {
+      // Draw the pose landmarks with custom styling
+      drawLandmarks(canvasCtx, results.poseLandmarks);
+      
+      // Draw the connections between landmarks
+      drawConnections(canvasCtx, results.poseLandmarks);
+    }
+    
+    canvasCtx.restore();
+  }
+  
+  // Custom landmark drawing function with fashion-oriented styling
+  function drawLandmarks(ctx, landmarks) {
+    if (!landmarks) return;
+    
+    for (const landmark of landmarks) {
+      const x = landmark.x * canvasElement.width;
+      const y = landmark.y * canvasElement.height;
+      const z = landmark.z; // Use z for depth-based styling
+      
+      // Calculate visibility-based opacity
+      const opacity = landmark.visibility ? Math.max(0.2, landmark.visibility) : 0.2;
+      
+      // Draw landmark
+      ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+      ctx.beginPath();
+      
+      // Size based on z-depth (closer = larger)
+      const size = Math.max(4, 8 - (z * 20));
+      
+      ctx.arc(x, y, size, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Add a highlight effect
+      ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.5})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+  
+  // Custom connections drawing with fashion color coding
+  function drawConnections(ctx, landmarks) {
+    if (!landmarks) return;
+    
+    // Color coding for body parts
+    const colorMap = {
+      rightArm: '#3498db', // Blue
+      leftArm: '#2ecc71',  // Green
+      rightLeg: '#e74c3c', // Red
+      leftLeg: '#9b59b6',  // Purple
+      torso: '#1abc9c',    // Teal
+      face: '#f1c40f'      // Yellow
+    };
+    
+    // Define connections between landmarks with body part classification
+    const connections = [
+      // Face
+      {from: 0, to: 1, part: 'face'},
+      {from: 1, to: 2, part: 'face'},
+      {from: 2, to: 3, part: 'face'},
+      {from: 3, to: 7, part: 'face'},
+      {from: 0, to: 4, part: 'face'},
+      {from: 4, to: 5, part: 'face'},
+      {from: 5, to: 6, part: 'face'},
+      {from: 6, to: 8, part: 'face'},
+      
+      // Torso
+      {from: 11, to: 12, part: 'torso'},
+      {from: 12, to: 24, part: 'torso'},
+      {from: 24, to: 23, part: 'torso'},
+      {from: 23, to: 11, part: 'torso'},
+      
+      // Left arm
+      {from: 11, to: 13, part: 'leftArm'},
+      {from: 13, to: 15, part: 'leftArm'},
+      {from: 15, to: 17, part: 'leftArm'},
+      {from: 17, to: 19, part: 'leftArm'},
+      {from: 19, to: 15, part: 'leftArm'},
+      
+      // Right arm
+      {from: 12, to: 14, part: 'rightArm'},
+      {from: 14, to: 16, part: 'rightArm'},
+      {from: 16, to: 18, part: 'rightArm'},
+      {from: 18, to: 20, part: 'rightArm'},
+      {from: 20, to: 16, part: 'rightArm'},
+      
+      // Left leg
+      {from: 23, to: 25, part: 'leftLeg'},
+      {from: 25, to: 27, part: 'leftLeg'},
+      {from: 27, to: 29, part: 'leftLeg'},
+      {from: 29, to: 31, part: 'leftLeg'},
+      {from: 27, to: 31, part: 'leftLeg'},
+      
+      // Right leg
+      {from: 24, to: 26, part: 'rightLeg'},
+      {from: 26, to: 28, part: 'rightLeg'},
+      {from: 28, to: 30, part: 'rightLeg'},
+      {from: 30, to: 32, part: 'rightLeg'},
+      {from: 28, to: 32, part: 'rightLeg'}
+    ];
+    
+    // Draw each connection with its assigned color
+    for (const connection of connections) {
+      const from = landmarks[connection.from];
+      const to = landmarks[connection.to];
+      
+      // Skip if landmarks not visible enough
+      if (from.visibility < 0.3 || to.visibility < 0.3) continue;
+      
+      // Calculate coordinates
+      const fromX = from.x * canvasElement.width;
+      const fromY = from.y * canvasElement.height;
+      const toX = to.x * canvasElement.width;
+      const toY = to.y * canvasElement.height;
+      
+      // Get color for this body part
+      const color = colorMap[connection.part];
+      
+      // Average visibility for this connection
+      const visibility = (from.visibility + to.visibility) / 2;
+      
+      // Draw connection with gradient based on body part
+      const gradient = ctx.createLinearGradient(fromX, fromY, toX, toY);
+      gradient.addColorStop(0, `${color}99`); // Semi-transparent
+      gradient.addColorStop(1, `${color}${Math.round(visibility * 255).toString(16).padStart(2, '0')}`);
+      
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(toX, toY);
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      
+      // Add highlight effect
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(toX, toY);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${visibility * 0.3})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+  
+  // Start camera
+  function startCamera() {
+    if (poseActive) return;
+    
+    const constraints = {
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'user'
+      }
+    };
+    
+    if (window.PoseUI) {
+      window.PoseUI.setStatus('Starting camera...', 'warning');
+    }
+    
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then((stream) => {
+        videoElement.srcObject = stream;
+        videoElement.onloadedmetadata = () => {
+          videoElement.play();
+          startPoseDetection();
+        };
+      })
+      .catch((err) => {
+        console.error('Error accessing camera: ', err);
+        if (window.PoseUI) {
+          window.PoseUI.setStatus(`Camera error: ${err.message}`, 'error');
         }
-      }
-    }
-    
-    // Draw larger circles at key joints
-    for (const point of keyPoints) {
-      const landmark = landmarks[window.POSE_LANDMARKS[point]];
-      
-      if (landmark && landmark.visibility > 0.5) {
-        const x = landmark.x * canvasElement.width;
-        const y = landmark.y * canvasElement.height;
-        
-        // Draw a larger filled circle at each key point
-        canvasCtx.beginPath();
-        canvasCtx.arc(x, y, 8, 0, 2 * Math.PI);
-        canvasCtx.fillStyle = 'white';
-        canvasCtx.fill();
-        
-        // Draw black outline
-        canvasCtx.lineWidth = 2;
-        canvasCtx.strokeStyle = 'black';
-        canvasCtx.stroke();
-      }
-    }
+        document.getElementById('troubleshooting').style.display = 'block';
+      });
   }
   
-  canvasCtx.restore();
-}
-
-// Initialize the MediaPipe Pose solution
-const pose = new Pose({
-  locateFile: (file) => {
-    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-  }
-});
-
-pose.setOptions({
-  modelComplexity: 1,
-  smoothLandmarks: true,
-  enableSegmentation: false,
-  smoothSegmentation: false,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.5
-});
-
-pose.onResults(onResults);
-
-// Start button event listener
-startButton.addEventListener('click', () => {
-  if (!poseRunning) {
-    startCamera();
-  }
-});
-
-// Stop button event listener
-stopButton.addEventListener('click', () => {
-  if (poseRunning && camera) {
-    stopCamera();
-  }
-});
-
-// Function to start the camera with proper error handling
-function startCamera() {
-  try {
-    statusElement.textContent = "Starting camera...";
-    statusElement.style.color = "blue";
-    
-    // Reset frame counter
-    frameCount = 0;
-    
-    // Create camera instance if it doesn't exist
-    if (!camera) {
-      camera = new Camera(videoElement, {
-        onFrame: async () => {
-          try {
-            await pose.send({image: videoElement});
-          } catch (error) {
-            console.error("Error in pose detection:", error);
-            statusElement.textContent = `Error: ${error.message}`;
-            statusElement.style.color = "red";
-          }
-        },
-        width: 640,
-        height: 480
-      });
+  // Start pose detection
+  function startPoseDetection() {
+    if (!pose) {
+      initializePose();
     }
     
-    // Start the camera with promise handling
+    // Set up camera
+    camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await pose.send({image: videoElement});
+      },
+      width: 1280,
+      height: 720
+    });
+    
+    // Start camera
     camera.start()
       .then(() => {
-        console.log("Camera started successfully");
-        poseRunning = true;
+        console.log('Camera started successfully');
+        poseActive = true;
         startButton.disabled = true;
         stopButton.disabled = false;
-        statusElement.textContent = "Camera running - processing frames...";
-        statusElement.style.color = "green";
+        
+        if (window.PoseUI) {
+          window.PoseUI.setStatus('Pose detection active', 'success');
+        }
       })
-      .catch(error => {
-        console.error("Failed to start camera:", error);
-        statusElement.textContent = `Camera error: ${error.message}`;
-        statusElement.style.color = "red";
+      .catch((err) => {
+        console.error('Error starting camera: ', err);
+        if (window.PoseUI) {
+          window.PoseUI.setStatus(`Error: ${err.message}`, 'error');
+        }
       });
-  } catch (error) {
-    console.error("Error starting camera:", error);
-    statusElement.textContent = `Setup error: ${error.message}`;
-    statusElement.style.color = "red";
   }
-}
-
-// Function to stop the camera
-function stopCamera() {
-  try {
-    camera.stop();
-    poseRunning = false;
+  
+  // Stop camera and pose detection
+  function stopCamera() {
+    if (!poseActive) return;
+    
+    if (camera) {
+      camera.stop();
+    }
+    
+    if (videoElement.srcObject) {
+      videoElement.srcObject.getTracks().forEach(track => track.stop());
+      videoElement.srcObject = null;
+    }
+    
+    poseActive = false;
     startButton.disabled = false;
     stopButton.disabled = true;
-    statusElement.textContent = `Camera stopped. Processed ${frameCount} frames`;
-    statusElement.style.color = "blue";
-  } catch (error) {
-    console.error("Error stopping camera:", error);
-    statusElement.textContent = `Stop error: ${error.message}`;
-    statusElement.style.color = "red";
-  }
-}
-
-// Add event listener for when the page is hidden/shown to handle camera correctly
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && poseRunning) {
-    // Page is hidden, pause camera to save resources
-    if (camera) {
-      try {
-        camera.stop();
-        statusElement.textContent = "Camera paused (page hidden)";
-        statusElement.style.color = "orange";
-      } catch (e) {
-        console.log("Error pausing camera:", e);
-      }
-    }
-  } else if (document.visibilityState === 'visible' && poseRunning) {
-    // Page is visible again, resume camera if it was running
-    if (camera) {
-      try {
-        camera.start()
-          .then(() => {
-            statusElement.textContent = "Camera resumed - processing frames...";
-            statusElement.style.color = "green";
-          })
-          .catch(e => {
-            console.error("Failed to resume camera:", e);
-            statusElement.textContent = `Resume error: ${e.message}`;
-            statusElement.style.color = "red";
-          });
-      } catch (e) {
-        console.error("Error resuming camera:", e);
-      }
+    
+    // Clear the canvas
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    
+    if (window.PoseUI) {
+      window.PoseUI.setStatus('Camera stopped', 'info');
     }
   }
+  
+  // Event listeners for buttons
+  startButton.addEventListener('click', startCamera);
+  stopButton.addEventListener('click', stopCamera);
+  
+  // Canvas setup
+  function setupCanvas() {
+    // Set canvas to display size
+    const displayWidth = canvasElement.clientWidth;
+    const displayHeight = canvasElement.clientHeight;
+    
+    // Check if the canvas is not the same size
+    if (canvasElement.width !== displayWidth || 
+        canvasElement.height !== displayHeight) {
+      canvasElement.width = displayWidth;
+      canvasElement.height = displayHeight;
+    }
+  }
+  
+  // Handle resize events
+  window.addEventListener('resize', setupCanvas);
+  
+  // Initial setup
+  setupCanvas();
+  initializePose();
+  
+  // Expose functions to global scope for debugging
+  window.startPoseCamera = startCamera;
+  window.stopPoseCamera = stopCamera;
 });
