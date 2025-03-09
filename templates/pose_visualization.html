@@ -1198,13 +1198,14 @@
       const clothingImg = window.selectedClothing.image;
       
       // Define key landmarks for positioning (using MediaPipe pose model landmarks)
+      const nose = landmarks[0]; // Nose
       const leftShoulder = landmarks[11]; // Left shoulder
       const rightShoulder = landmarks[12]; // Right shoulder
       const leftHip = landmarks[23]; // Left hip
       const rightHip = landmarks[24]; // Right hip
       
       // Skip if key landmarks are not visible
-      if (!leftShoulder || !rightShoulder || !leftHip || !rightHip || 
+      if (!leftShoulder || !rightShoulder || !nose || 
           leftShoulder.visibility < 0.5 || rightShoulder.visibility < 0.5) {
         return;
       }
@@ -1224,26 +1225,34 @@
         Math.pow((leftHip.y - leftShoulder.y) * height, 2)
       );
       
-      // Calculate center point between shoulders (for positioning)
+      // Calculate center point between shoulders for horizontal positioning
       const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * width;
-      const centerY = ((leftShoulder.y + rightShoulder.y) / 2) * height;
       
-      // Calculate clothing dimensions (scaled to fit the person)
-      const clothingWidth = shoulderWidth * 1.7; // Slightly wider than shoulders
-      const clothingHeight = torsoHeight * 1.3; // Slightly longer than torso
+      // Vertical positioning - use nose and shoulder position to determine neck position
+      // This positions the top of the clothing just below the chin
+      const noseY = nose.y * height;
+      const shoulderY = ((leftShoulder.y + rightShoulder.y) / 2) * height;
       
-      // Draw clothing with proper positioning
+      // Calculate neck position as a point slightly below the nose (adjust factor as needed)
+      const neckOffset = (shoulderY - noseY) * 0.2; // 20% of the distance from nose to shoulders
+      const neckY = noseY + neckOffset;
+      
+      // Calculate clothing dimensions with better scaling
+      const clothingWidth = shoulderWidth * 2.5;
+      const clothingHeight = torsoHeight * 1.6; // Slightly reduced height
+      
+      // Draw clothing with precise positioning aligned to the neck/chin
       ctx.save();
       
-      // Mirror again for the clothing to match video orientation
+      // Mirror for video orientation
       ctx.scale(-1, 1);
       ctx.translate(-width, 0);
       
-      // Draw the clothing image
+      // Draw the clothing image positioned right below the face
       ctx.drawImage(
         clothingImg,
         centerX - clothingWidth / 2,
-        centerY - clothingHeight * 0.2, // Adjust vertical position
+        neckY - clothingHeight * 0.05, // Slight adjustment to position top edge at the neck
         clothingWidth,
         clothingHeight
       );
@@ -1289,9 +1298,9 @@
       const centerX = ((leftHip.x + rightHip.x) / 2) * width;
       const centerY = ((leftHip.y + rightHip.y) / 2) * height;
       
-      // Calculate clothing dimensions
-      const clothingWidth = hipWidth * 1.5; // Wider than hips
-      const clothingHeight = legLength * 1.05; // Slightly shorter than legs
+      // Calculate clothing dimensions - INCREASED SCALING FACTORS
+      const clothingWidth = hipWidth * 2.3; // Increased from 1.5 for better fitting
+      const clothingHeight = legLength * 1.2; // Increased from 1.05 for better fitting
       
       // Draw clothing with proper positioning
       ctx.save();
@@ -1317,6 +1326,7 @@
       const clothingImg = window.selectedClothing.image;
       
       // Define key landmarks for positioning
+      const nose = landmarks[0]; // Nose
       const leftShoulder = landmarks[11]; // Left shoulder
       const rightShoulder = landmarks[12]; // Right shoulder
       const leftHip = landmarks[23]; // Left hip
@@ -1325,7 +1335,7 @@
       const rightKnee = landmarks[26]; // Right knee
       
       // Skip if key landmarks are not visible
-      if (!leftShoulder || !rightShoulder || !leftHip || !rightHip || 
+      if (!leftShoulder || !rightShoulder || !nose ||
           leftShoulder.visibility < 0.5 || rightShoulder.visibility < 0.5) {
         return;
       }
@@ -1346,26 +1356,33 @@
         Math.pow((leftKnee.y - leftShoulder.y) * height, 2)
       );
       
-      // Calculate center point between shoulders
+      // Calculate center point between shoulders for horizontal positioning
       const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * width;
-      const centerY = ((leftShoulder.y + rightShoulder.y) / 2) * height;
+      
+      // Vertical positioning - use nose and shoulder position to determine neck position
+      const noseY = nose.y * height;
+      const shoulderY = ((leftShoulder.y + rightShoulder.y) / 2) * height;
+      
+      // Calculate neck position as a point slightly below the nose
+      const neckOffset = (shoulderY - noseY) * 0.25; // 25% of the distance from nose to shoulders
+      const neckY = noseY + neckOffset;
       
       // Calculate dress dimensions
-      const dressWidth = shoulderWidth * 1.8; // Wider than shoulders
-      const dressHeight = bodyLength * 1.2; // Longer than shoulder-to-knee
+      const dressWidth = shoulderWidth * 3.0;
+      const dressHeight = bodyLength * 1.8;
       
-      // Draw dress with proper positioning
+      // Draw dress with precise positioning aligned to the neck/chin
       ctx.save();
       
-      // Mirror again for the clothing to match video orientation
+      // Mirror for video orientation
       ctx.scale(-1, 1);
       ctx.translate(-width, 0);
       
-      // Draw the clothing image
+      // Draw the dress positioned right below the face
       ctx.drawImage(
         clothingImg,
         centerX - dressWidth / 2,
-        centerY - dressHeight * 0.25, // Position higher to cover shoulders
+        neckY - dressHeight * 0.05, // Slight adjustment to position top edge at the neck
         dressWidth,
         dressHeight
       );
