@@ -903,13 +903,7 @@
       </div>
       
       <div class="info-body p-4">
-        <div class="d-flex align-items-center justify-content-between mb-4">
-          <p class="mb-0">These are all the items from your wardrobe that you can visualize with motion capture:</p>
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="showAllItems" checked>
-            <label class="form-check-label" for="showAllItems">Show All Items</label>
-          </div>
-        </div>
+        <p class="mb-4">These are all the items from your wardrobe that you can visualize with motion capture:</p>
         
         <!-- Debug info to help identify the issue (can be removed later) -->
         <div id="debug-info" style="display: none; margin-bottom: 20px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; font-family: monospace; font-size: 12px;">
@@ -925,138 +919,65 @@
         <button class="btn btn-sm btn-outline-secondary mb-3" onclick="document.getElementById('debug-info').style.display='block'">Show Debug Info</button>
         
         <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4" id="dressCollection">
-          {% set dress_count = 0 %}
-          
-          <!-- First try to show dress/skirt items -->
+          <!-- Display all images regardless of type -->
           {% for image in images %}
-            {% if image.wearable|lower == 'dress' or
-                  image.is_dress_item or
-                  'gown' in image.label|lower or
-                  'sarong' in image.label|lower or 
-                  'dress' in image.label|lower or
-                  'skirt' in image.label|lower or
-                  image.costume|lower == 'party' %}
-              {% set dress_count = dress_count + 1 %}
-              <div class="col" id="dress-item-{{ image.filename }}">
-                <div class="info-card mb-0" style="overflow: visible;">
-                  <div style="height: 200px; position: relative; border-radius: 15px 15px 0 0; overflow: hidden;">
-                    <!-- Loading placeholder -->
-                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: #f8f9fa; color: #6c757d; z-index: 1;">
-                      <i class="fas fa-spinner fa-spin"></i>
-                      <p>Loading item...</p>
-                    </div>
-                    
-                    <!-- Error container -->
-                    <div class="image-error-container" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; background-color: #f8f9fa; color: #dc3545; z-index: 2;" id="pose-error-{{ image.filename }}">
-                      <i class="fas fa-exclamation-circle text-danger"></i>
-                      <p>Failed to load image</p>
-                      <button class="retry-button" onclick="retryLoadDressImage(this, '{{ image.filename }}')">
-                        <i class="fas fa-sync-alt"></i> Retry
-                      </button>
-                    </div>
-                    
-                    {% if image.is_valid %}
-                    <img src="{{ url_for('uploaded_file', filename=image.filename) }}?t={{ range(1, 9999) | random }}" 
-                         alt="{{ image.label }}" 
-                         class="pose-lazy-load"
-                         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.5s; z-index: 0;"
-                         data-valid="true"
-                         id="pose-img-{{ image.filename }}"
-                         onload="handlePoseDressImageLoad(this)"
-                         onerror="handlePoseDressImageError(this, '{{ image.filename }}')">
-                    {% else %}
-                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #f0f0f0; color: #6c757d; z-index: 1;">
-                      <i class="fas fa-tshirt" style="font-size: 2.5rem; margin-bottom: 10px;"></i>
-                      <p>{{ image.label }}</p>
-                      <small>(Image unavailable)</small>
-                    </div>
+            <div class="col" id="item-{{ image.filename }}">
+              <div class="info-card mb-0" style="overflow: visible;">
+                <div style="height: 200px; position: relative; border-radius: 15px 15px 0 0; overflow: hidden;">
+                  <!-- Loading placeholder -->
+                  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: #f8f9fa; color: #6c757d; z-index: 1;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading item...</p>
+                  </div>
+                  
+                  <!-- Error container -->
+                  <div class="image-error-container" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; background-color: #f8f9fa; color: #dc3545; z-index: 2;" id="pose-error-{{ image.filename }}">
+                    <i class="fas fa-exclamation-circle text-danger"></i>
+                    <p>Failed to load image</p>
+                    <button class="retry-button" onclick="retryLoadDressImage(this, '{{ image.filename }}')">
+                      <i class="fas fa-sync-alt"></i> Retry
+                    </button>
+                  </div>
+                  
+                  {% if image.is_valid %}
+                  <img src="{{ url_for('uploaded_file', filename=image.filename) }}?t={{ range(1, 9999) | random }}" 
+                       alt="{{ image.label }}" 
+                       class="pose-lazy-load"
+                       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.5s; z-index: 0;"
+                       data-valid="true"
+                       id="pose-img-{{ image.filename }}"
+                       onload="handlePoseDressImageLoad(this)"
+                       onerror="handlePoseDressImageError(this, '{{ image.filename }}')">
+                  {% else %}
+                  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #f0f0f0; color: #6c757d; z-index: 1;">
+                    <i class="fas fa-tshirt" style="font-size: 2.5rem; margin-bottom: 10px;"></i>
+                    <p>{{ image.label }}</p>
+                    <small>(Image unavailable)</small>
+                  </div>
+                  {% endif %}
+                </div>
+                
+                <div class="info-body" style="padding: 15px;">
+                  <h5 class="mb-3">{{ image.label }}</h5>
+                  <div class="d-flex flex-wrap gap-2 mb-2">
+                    <span class="badge bg-primary">{{ image.wearable }}</span>
+                    <span class="badge bg-secondary">{{ image.sex }}</span>
+                    {% if image.costume != 'Unknown' %}
+                      <span class="badge bg-info">{{ image.costume }}</span>
+                    {% endif %}
+                    {% if image.pattern != 'Unknown' and image.pattern != 'plain' %}
+                      <span class="badge bg-success">{{ image.pattern }}</span>
                     {% endif %}
                   </div>
                   
-                  <div class="info-body" style="padding: 15px;">
-                    <h5 class="mb-3">{{ image.label }}</h5>
-                    <div class="d-flex flex-wrap gap-2 mb-2">
-                      <span class="badge bg-primary">Wearable Item</span>
-                      <span class="badge bg-secondary">{{ image.sex }}</span>
-                      {% if image.costume != 'Unknown' %}
-                        <span class="badge bg-info">{{ image.costume }}</span>
-                      {% endif %}
-                      {% if image.pattern != 'Unknown' and image.pattern != 'plain' %}
-                        <span class="badge bg-success">{{ image.pattern }}</span>
-                      {% endif %}
-                    </div>
-                    
-                    <div class="mt-3 d-flex align-items-center">
-                      <span style="display: inline-block; width: 25px; height: 25px; border-radius: 4px; background-color: {{ image.color }}; margin-right: 10px; border: 1px solid #ddd;"></span>
-                      <span style="font-weight: 500;">{{ image.color }}</span>
-                    </div>
+                  <div class="mt-3 d-flex align-items-center">
+                    <span style="display: inline-block; width: 25px; height: 25px; border-radius: 4px; background-color: {{ image.color }}; margin-right: 10px; border: 1px solid #ddd;"></span>
+                    <span style="font-weight: 500;">{{ image.color }}</span>
                   </div>
                 </div>
               </div>
-            {% endif %}
+            </div>
           {% endfor %}
-          
-          <!-- If no dress items were found, show all clothing items -->
-          {% if dress_count == 0 %}
-            {% for image in images %}
-              <div class="col" id="clothing-item-{{ image.filename }}">
-                <div class="info-card mb-0" style="overflow: visible;">
-                  <div style="height: 200px; position: relative; border-radius: 15px 15px 0 0; overflow: hidden;">
-                    <!-- Loading placeholder -->
-                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: #f8f9fa; color: #6c757d; z-index: 1;">
-                      <i class="fas fa-spinner fa-spin"></i>
-                      <p>Loading item...</p>
-                    </div>
-                    
-                    <!-- Error container -->
-                    <div class="image-error-container" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; background-color: #f8f9fa; color: #dc3545; z-index: 2;" id="pose-error-{{ image.filename }}">
-                      <i class="fas fa-exclamation-circle text-danger"></i>
-                      <p>Failed to load image</p>
-                      <button class="retry-button" onclick="retryLoadDressImage(this, '{{ image.filename }}')">
-                        <i class="fas fa-sync-alt"></i> Retry
-                      </button>
-                    </div>
-                    
-                    {% if image.is_valid %}
-                    <img src="{{ url_for('uploaded_file', filename=image.filename) }}?t={{ range(1, 9999) | random }}" 
-                         alt="{{ image.label }}" 
-                         class="pose-lazy-load"
-                         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.5s; z-index: 0;"
-                         data-valid="true"
-                         id="pose-img-{{ image.filename }}"
-                         onload="handlePoseDressImageLoad(this)"
-                         onerror="handlePoseDressImageError(this, '{{ image.filename }}')">
-                    {% else %}
-                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #f0f0f0; color: #6c757d; z-index: 1;">
-                      <i class="fas fa-tshirt" style="font-size: 2.5rem; margin-bottom: 10px;"></i>
-                      <p>{{ image.label }}</p>
-                      <small>(Image unavailable)</small>
-                    </div>
-                    {% endif %}
-                  </div>
-                  
-                  <div class="info-body" style="padding: 15px;">
-                    <h5 class="mb-3">{{ image.label }}</h5>
-                    <div class="d-flex flex-wrap gap-2 mb-2">
-                      <span class="badge bg-primary">{{ image.wearable }}</span>
-                      <span class="badge bg-secondary">{{ image.sex }}</span>
-                      {% if image.costume != 'Unknown' %}
-                        <span class="badge bg-info">{{ image.costume }}</span>
-                      {% endif %}
-                      {% if image.pattern != 'Unknown' and image.pattern != 'plain' %}
-                        <span class="badge bg-success">{{ image.pattern }}</span>
-                      {% endif %}
-                    </div>
-                    
-                    <div class="mt-3 d-flex align-items-center">
-                      <span style="display: inline-block; width: 25px; height: 25px; border-radius: 4px; background-color: {{ image.color }}; margin-right: 10px; border: 1px solid #ddd;"></span>
-                      <span style="font-weight: 500;">{{ image.color }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            {% endfor %}
-          {% endif %}
           
           <!-- No items found message -->
           {% if images|length == 0 %}
