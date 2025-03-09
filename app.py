@@ -13,6 +13,8 @@ from transformers import pipeline  # NEW import
 import requests  # NEW import for local API call
 import ollama  # ensure ollama is imported
 import shutil  # Add this import for file operations
+from rembg import remove  # Add this import for background removal
+import io  # Add this for handling image data
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
@@ -219,6 +221,40 @@ if not os.path.exists(DEFAULT_IMG_DIR):
         except Exception as e:
             print(f"Could not create default image: {e}")
 
+# New function to remove background from images
+def remove_background(input_image):
+    """
+    Removes the background from an image and returns the processed image.
+    
+    Args:
+        input_image: PIL Image or file-like object
+    Returns:
+        PIL Image with transparent background
+    """
+    try:
+        # Convert PIL Image to bytes if needed
+        if isinstance(input_image, Image.Image):
+            img_byte_arr = io.BytesIO()
+            input_image.save(img_byte_arr, format='PNG')
+            img_data = img_byte_arr.getvalue()
+        else:
+            # Assume input is a file path
+            with open(input_image, 'rb') as img_file:
+                img_data = img_file.read()
+        
+        # Process the image to remove background
+        output_data = remove(img_data)
+        
+        # Convert back to PIL Image
+        result_image = Image.open(io.BytesIO(output_data))
+        return result_image
+    except Exception as e:
+        print(f"Error removing background: {str(e)}")
+        # Return the original image if background removal fails
+        if isinstance(input_image, str) and os.path.exists(input_image):
+            return Image.open(input_image)
+        return input_image
+
 @app.route("/")
 def index():
     # Synchronize the database with actual files
@@ -278,13 +314,33 @@ def upload():
             continue
         try:
             filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             
-            # Ensure the parent directory exists
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            # Create temporary file path
+            temp_path = os.path.join("/tmp", filename)
+            file.save(temp_path)
             
-            # Save the file
-            file.save(file_path)
+            # Remove background from image
+            try:
+                processed_image = remove_background(temp_path)
+                
+                # Save processed image (with transparent background)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                
+                # Save with transparent background
+                processed_image.save(file_path, format="PNG")
+                
+                print(f"Background removed and saved: {filename}")
+            except Exception as e:
+                print(f"Background removal failed for {filename}: {str(e)}")
+                # If background removal fails, use original image
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                shutil.copy(temp_path, file_path)
+                
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
             
             # Process the image
             label = classify_cloth(file_path)
@@ -315,7 +371,8 @@ def upload():
                 "pattern": pattern,
                 "sex": sex,
                 "hand": hand,
-                "path": file_path  # Include the full path for debugging
+                "path": file_path,
+                "background_removed": True
             })
         except Exception as e:
             # Continue with other files if one fails
@@ -451,9 +508,29 @@ def match_upload():
     file = request.files["match_image"]
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
+        
     filename = secure_filename(file.filename)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(file_path)
+    
+    # Create temporary file path
+    temp_path = os.path.join("/tmp", filename)
+    file.save(temp_path)
+    
+    # Remove background from image
+    try:
+        processed_image = remove_background(temp_path)
+        
+        # Save processed image (with transparent background)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        processed_image.save(file_path, format="PNG")
+    except Exception as e:
+        print(f"Background removal failed for {filename}: {str(e)}")
+        # If background removal fails, use original image
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        shutil.copy(temp_path, file_path)
+    
+    # Clean up temp file
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
     
     new_label = classify_cloth(file_path)
     new_wearable = determine_wearable_type(new_label)

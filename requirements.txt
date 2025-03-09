@@ -1,0 +1,10 @@
+flask
+pillow
+numpy
+scikit-learn
+sentence-transformers
+transformers
+rembg
+werkzeug
+ollama
+onnxruntime  # Add this dependency for rembg
