@@ -333,6 +333,17 @@
         background-color: #f8d7da;
         color: #721c24;
       }
+      
+      .single-reason {
+        font-size: 1.1rem;
+        line-height: 1.5;
+        color: #333;
+        background-color: #f9f9f9;
+        padding: 10px;
+        border-radius: 5px;
+        border-left: 4px solid #2575fc;
+        margin: 10px 0;
+      }
     </style>
 </head>
 <body>
@@ -464,139 +475,10 @@
             <i class="fas fa-user-alt"></i> Pose Rigging
         </a>
     </div>
-    <!-- ...existing code... -->
     
     <script>
-      document.getElementById("matchForm").addEventListener("submit", async function(e) {
-          e.preventDefault();
-          const formData = new FormData(this);
-          
-          // Show loading animation
-          const loadingAnimation = document.getElementById("loadingAnimation");
-          const matchResultDiv = document.getElementById("matchResult");
-          
-          loadingAnimation.classList.add("showing");
-          matchResultDiv.innerHTML = "";
-          
-          try {
-              const response = await fetch("/match_upload", {
-                  method: "POST",
-                  body: formData
-              });
-              
-              if (!response.ok) {
-                  throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
-              }
-              
-              const res = await response.json();
-              
-              // Hide loading after a minimum time (for better UX)
-              setTimeout(() => {
-                  // Hide loading animation
-                  loadingAnimation.classList.remove("showing");
-                  
-                  if(res.error){
-                     matchResultDiv.innerHTML = `<div class="alert alert-danger">${res.error}</div>`;
-                     return;
-                  }
-                  const newItem = res.matched.new_item;
-                  const bestMatch = res.matched.best_match;
-                  
-                  const container = document.createElement('div');
-                  container.className = "comparison-container";
-                  
-                  const newDiv = document.createElement('div');
-                  newDiv.className = "item";
-                  newDiv.innerHTML = `
-                    <h3 class="item-header">New Item</h3>
-                    <div class="image-wrapper">
-                        <div class="image-loading">
-                            <div class="spinner-border text-primary mb-2" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <span>Loading image...</span>
-                        </div>
-                        <img src="/uploads/${newItem.filename}?t=${new Date().getTime()}" 
-                             alt="New Item" 
-                             data-filename="${newItem.filename}"
-                             onload="this.previousElementSibling.style.display='none';"
-                             onerror="handleMatchImageError(this, '${newItem.filename}')">
-                    </div>
-                    <ul class="property-list">
-                      <li><span class="property-name">Label:</span> <span class="property-value">${newItem.label}</span></li>
-                      <li><span class="property-name">Wearable:</span> <span class="property-value">${newItem.wearable}</span></li>
-                      <li><span class="property-name">Costume:</span> <span class="property-value">${newItem.costume}</span></li>
-                      <li><span class="property-name">Sex:</span> <span class="property-value">${newItem.sex}</span></li>
-                      <li>
-                        <span class="property-name">Color:</span> 
-                        <span class="property-value">
-                          <span class="color-sample" style="background-color:${newItem.color};"></span>
-                          ${newItem.color}
-                        </span>
-                      </li>
-                      <li><span class="property-name">Pattern:</span> <span class="property-value">${newItem.pattern}</span></li>
-                    </ul>
-                  `;
-                  
-                  const matchDiv = document.createElement('div');
-                  matchDiv.className = "item";
-                  if(bestMatch){
-                    matchDiv.innerHTML = `
-                      <h3 class="item-header">Best Match</h3>
-                      <div class="image-wrapper">
-                          <div class="image-loading">
-                              <div class="spinner-border text-primary mb-2" role="status">
-                                  <span class="visually-hidden">Loading...</span>
-                              </div>
-                              <span>Loading image...</span>
-                          </div>
-                          <img src="/uploads/${bestMatch.filename}?t=${new Date().getTime()}" 
-                               alt="Best Match" 
-                               data-filename="${bestMatch.filename}"
-                               onload="this.previousElementSibling.style.display='none';"
-                               onerror="handleMatchImageError(this, '${bestMatch.filename}')">
-                      </div>
-                      <ul class="property-list">
-                        <li><span class="property-name">Label:</span> <span class="property-value">${bestMatch.data.label}</span></li>
-                        <li><span class="property-name">Wearable:</span> <span class="property-value">${bestMatch.data.wearable}</span></li>
-                        <li><span class="property-name">Costume:</span> <span class="property-value">${bestMatch.data.costume}</span></li>
-                        <li><span class="property-name">Sex:</span> <span class="property-value">${bestMatch.data.sex}</span></li>
-                        <li>
-                          <span class="property-name">Color:</span> 
-                          <span class="property-value">
-                            <span class="color-sample" style="background-color:${bestMatch.data.color};"></span>
-                            ${bestMatch.data.color}
-                          </span>
-                        </li>
-                        <li><span class="property-name">Pattern:</span> <span class="property-value">${bestMatch.data.pattern}</span></li>
-                        <li><span class="property-name">Similarity Score:</span> <span class="property-value">${bestMatch.score.toFixed(2)}</span></li>
-                      </ul>
-                    `;
-                  } else {
-                    matchDiv.innerHTML = `<h3 class="item-header">No Matching Candidate Found</h3>`;
-                  }
-                  
-                  container.appendChild(newDiv);
-                  container.appendChild(matchDiv);
-                  matchResultDiv.appendChild(container);
-                  
-                  // Add reason in a separate container
-                  if(bestMatch && res.matched.reason) {
-                    const reasonContainer = document.createElement('div');
-                    reasonContainer.className = "reason-container fade-in";
-                    reasonContainer.innerHTML = `
-                      <h3>Why These Match Well</h3>
-                      <p>${res.matched.reason}</p>
-                    `;
-                    matchResultDiv.appendChild(reasonContainer);
-                  }
-              }, 800); // Minimum display time for loading animation
-          } catch (error) {
-              // Handle any errors
-              loadingAnimation.classList.remove("showing");
-              matchResultDiv.innerHTML = `<div class="alert alert-danger">An error occurred: ${error.message}</div>`;
-          }
-      });
+      // Remove the first/duplicate form handler that causes duplicate results
+      // Keep only the enhanced version below
       
       document.getElementById("loadMatchesBtn").addEventListener("click", async function() {
           // Add loading indicator
@@ -678,7 +560,7 @@
                     reasonContainer.className = "reason-container";
                     reasonContainer.innerHTML = `
                       <h3>Why These Match Well</h3>
-                      <p>${match.reason}</p>
+                      <p class="single-reason">${match.reason}</p>
                     `;
                     matchesList.appendChild(reasonContainer);
                   }
@@ -795,7 +677,7 @@
         imgElement.src = `/uploads/${filename}?retry=${timestamp}&r=${Math.random()}`;
       }
       
-      // Enhanced match form submission with better image handling
+      // MAIN FORM HANDLER - Keep only this version of the form submission handler
       document.getElementById("matchForm").addEventListener("submit", async function(e) {
           e.preventDefault();
           const formData = new FormData(this);
@@ -916,7 +798,7 @@
                     reasonContainer.className = "reason-container fade-in";
                     reasonContainer.innerHTML = `
                       <h3>Why These Match Well</h3>
-                      <p>${res.matched.reason}</p>
+                      <p class="single-reason">${res.matched.reason}</p>
                     `;
                     matchResultDiv.appendChild(reasonContainer);
                   }
