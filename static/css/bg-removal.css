@@ -1,0 +1,193 @@
+/**
+ * Background Removal Animation Styles
+ */
+
+/* Animation Keyframes */
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 0.8; }
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes magic-glow {
+    0%, 100% { filter: drop-shadow(0 0 3px rgba(255, 204, 0, 0.8)); }
+    50% { filter: drop-shadow(0 0 12px rgba(255, 204, 0, 1)); }
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Background Removal Animation Container */
+.bg-removal-animation-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: opacity 0.5s ease;
+}
+
+.removal-effect {
+    text-align: center;
+    color: white;
+    transform: translateY(0);
+    animation: float 3s ease-in-out infinite;
+}
+
+.magic-wand {
+    font-size: 32px;
+    margin-bottom: 15px;
+    color: #ffcc00;
+    animation: magic-glow 2s ease-in-out infinite, spin 6s linear infinite;
+}
+
+.removal-progress {
+    width: 120px;
+    margin: 0 auto 10px;
+}
+
+.progress-track {
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #4a90e2, #2575fc);
+    border-radius: 3px;
+    transition: width 0.2s ease;
+}
+
+.removal-text {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* Completion Effects */
+.bg-removal-animation-overlay.completed .magic-wand {
+    animation: pulse 0.5s ease-in-out;
+    color: #4eff4e;
+}
+
+.removal-particle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    opacity: 1;
+    z-index: 11;
+    transform: scale(1);
+    transition: transform 1s ease-out, opacity 1s ease-out;
+}
+
+/* Before-After Comparison */
+.before-after-container {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.image-comparison-slider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: white;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: ew-resize;
+    z-index: 9;
+}
+
+.image-comparison-slider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    background-color: white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Slider handle icons */
+.slider-handle-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    color: #333;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Background removal result indicators */
+.bg-removal-result {
+    position: absolute;
+    bottom: 10px;
+    width: 100%;
+    text-align: center;
+    color: white;
+    font-size: 12px;
+    padding: 5px 0;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.7) 0%, rgba(37, 117, 252, 0.7) 100%);
+    border-radius: 0 0 8px 8px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+}
+
+.bg-removal-result.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Particle effects */
+.particle-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .progress-track {
+        height: 4px;
+    }
+    
+    .magic-wand {
+        font-size: 24px;
+    }
+    
+    .removal-text {
+        font-size: 12px;
+    }
+}

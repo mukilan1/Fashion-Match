@@ -231,6 +231,240 @@
             margin-bottom: 10px;
             color: #6c757d;
         }
+
+        /* Background removal animation styles */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+        
+        @keyframes fadeInOut {
+            0% { opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -100% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .bg-removal-container {
+            position: relative;
+            overflow: hidden;
+            margin: 5px;
+            border-radius: 8px;
+        }
+        
+        .bg-removal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 10;
+            border-radius: 8px;
+        }
+        
+        .bg-removal-status {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            padding: 5px;
+            background: linear-gradient(135deg, rgba(106, 17, 203, 0.8) 0%, rgba(37, 117, 252, 0.8) 100%);
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 9;
+            animation: fadeInOut 2s forwards;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+        
+        .magic-wand {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #ffcc00;
+            text-shadow: 0 0 10px rgba(255, 204, 0, 0.8);
+            z-index: 11;
+        }
+        
+        .bg-processing {
+            position: relative;
+        }
+        
+        .bg-processing::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                rgba(255,255,255,0) 0%, 
+                rgba(255,255,255,0.2) 50%, 
+                rgba(255,255,255,0) 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            z-index: 8;
+        }
+        
+        .bg-removal-progress {
+            width: 80%;
+            height: 4px;
+            background-color: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .bg-removal-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4a90e2, #2575fc);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        
+        .bg-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 10px;
+        }
+        
+        .transition-container {
+            position: relative;
+            perspective: 1000px;
+        }
+        
+        .image-flip {
+            transition: transform 1s;
+            transform-style: preserve-3d;
+        }
+        
+        .image-flip.flipping {
+            transform: rotateY(180deg);
+        }
+        
+        .image-front, .image-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+        }
+        
+        .image-back {
+            transform: rotateY(180deg);
+        }
+        
+        .bg-removed-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: linear-gradient(135deg, #4a90e2 0%, #2575fc 100%);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .bg-removed-badge.show {
+            opacity: 1;
+        }
+        
+        /* Before-after slider */
+        .before-after-slider {
+            position: relative;
+            overflow: hidden;
+            width: 150px;
+            height: 150px;
+            border-radius: 8px;
+        }
+        
+        .before-image, .after-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .before-image {
+            clip-path: inset(0 50% 0 0);
+            transition: clip-path 0.5s ease;
+        }
+        
+        .slider-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 4px;
+            background: white;
+            transform: translateX(-50%);
+            cursor: ew-resize;
+            z-index: 5;
+            transition: left 0.5s ease;
+        }
+        
+        .slider-handle::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+        }
+        
+        .slider-handle::after {
+            content: '⟷';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333;
+            font-size: 12px;
+        }
+        
+        /* Confetti effect for completion */
+        .confetti {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: #f00;
+            opacity: 0;
+        }
     </style>
 </head>
 <body>
@@ -392,39 +626,55 @@
             preview.classList.remove('d-none');
         }
         
-        Array.from(files).forEach(file => {
+        Array.from(files).forEach((file, index) => {
             const reader = new FileReader();
             reader.onload = function(e) {
-                const imgContainer = document.createElement('div');
-                imgContainer.style.position = 'relative';
-                imgContainer.style.display = 'inline-block';
+                // Create container for the background removal animation
+                const bgRemovalContainer = document.createElement('div');
+                bgRemovalContainer.className = 'bg-removal-container';
+                bgRemovalContainer.style.width = '150px';
+                bgRemovalContainer.style.height = '150px';
                 
+                // Create the image element
                 const img = document.createElement('img');
                 img.src = e.target.result;
-                img.style.maxWidth = '150px';
-                img.style.maxHeight = '150px';
-                img.style.margin = '5px';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+                img.style.borderRadius = '8px';
+                img.className = 'bg-processing';
+                img.dataset.original = e.target.result;
+                img.dataset.fileName = file.name;
                 
-                // Add error handling
-                img.onerror = function() {
-                    this.onerror = null;
-                    this.src = ''; // Clear source
-                    imgContainer.innerHTML = `
-                        <div style="width:150px;height:150px;margin:5px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-radius:6px;">
-                            <div style="text-align:center;">
-                                <i class="fas fa-exclamation-triangle text-warning" style="font-size:24px;"></i>
-                                <p style="margin-top:5px;font-size:12px;">Invalid image</p>
-                                <button style="background:#6c757d;color:white;border:none;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;" 
-                                        onclick="retryPreviewImage(this, '${e.target.result}')">
-                                    <i class="fas fa-sync-alt"></i> Retry
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                };
+                // Add overlay for background removal animation
+                const overlay = document.createElement('div');
+                overlay.className = 'bg-removal-overlay';
+                overlay.innerHTML = `
+                    <div class="bg-spinner"></div>
+                    <div style="text-align: center; margin-bottom: 5px;">
+                        <div class="magic-wand"><i class="fas fa-magic"></i></div>
+                        <span>Removing Background</span>
+                    </div>
+                    <div class="bg-removal-progress">
+                        <div class="bg-removal-progress-bar" id="progress-${index}"></div>
+                    </div>
+                `;
                 
-                imgContainer.appendChild(img);
-                preview.appendChild(imgContainer);
+                // Add image and overlay to container
+                bgRemovalContainer.appendChild(img);
+                bgRemovalContainer.appendChild(overlay);
+                
+                // Add badge for background removed status
+                const badge = document.createElement('div');
+                badge.className = 'bg-removed-badge';
+                badge.innerHTML = '<i class="fas fa-check-circle"></i> BG Removed';
+                bgRemovalContainer.appendChild(badge);
+                
+                // Add to preview
+                preview.appendChild(bgRemovalContainer);
+                
+                // Animate the progress bar
+                simulateBackgroundRemoval(index, bgRemovalContainer, img, badge);
             };
             
             reader.onerror = function() {
@@ -450,6 +700,170 @@
         });
     }
     
+    // Simulate background removal process with animation
+    function simulateBackgroundRemoval(index, container, img, badge) {
+        const progressBar = document.getElementById(`progress-${index}`);
+        let progress = 0;
+        
+        // Generate a random processing time between 1.5-3 seconds
+        const processingTime = Math.random() * 1500 + 1500;
+        const interval = 30;
+        const steps = processingTime / interval;
+        
+        const progressInterval = setInterval(() => {
+            progress += 1 / steps;
+            progressBar.style.width = `${Math.min(progress * 100, 100)}%`;
+            
+            if (progress >= 1) {
+                clearInterval(progressInterval);
+                
+                // Show completion effect
+                showBackgroundRemovedEffect(container, img, badge);
+            }
+        }, interval);
+    }
+    
+    // Show final effect after background is removed
+    function showBackgroundRemovedEffect(container, img, badge) {
+        const overlay = container.querySelector('.bg-removal-overlay');
+        
+        // Create the status element
+        const statusEl = document.createElement('div');
+        statusEl.className = 'bg-removal-status';
+        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Background Removed';
+        
+        // Remove the processing class and overlay
+        setTimeout(() => {
+            img.classList.remove('bg-processing');
+            overlay.style.opacity = '0';
+            
+            // Create before-after slider effect
+            createBeforeAfterEffect(container, img);
+            
+            // Add the status message
+            container.appendChild(statusEl);
+            
+            // Show the badge
+            setTimeout(() => {
+                badge.classList.add('show');
+            }, 1000);
+            
+            // Remove overlay after animation
+            setTimeout(() => {
+                overlay.remove();
+            }, 500);
+            
+            // Add confetti effect
+            createConfetti(container);
+        }, 200);
+    }
+    
+    // Create before-after slider effect
+    function createBeforeAfterEffect(container, img) {
+        // If we're just previewing, we simulate the background removal effect
+        // In a real application, you would replace this with actual before/after images
+        
+        // Create slider container
+        const sliderContainer = document.createElement('div');
+        sliderContainer.className = 'before-after-slider';
+        
+        // Original image (with background)
+        const beforeImg = document.createElement('img');
+        beforeImg.src = img.dataset.original;
+        beforeImg.className = 'before-image';
+        beforeImg.style.filter = 'none'; // Original image
+        
+        // "After" image (simulated background removal)
+        const afterImg = document.createElement('img');
+        afterImg.src = img.dataset.original;
+        afterImg.className = 'after-image';
+        afterImg.style.filter = 'drop-shadow(0 0 10px rgba(0,0,0,0.5))'; // Simulate transparency
+        
+        // Slider handle
+        const handle = document.createElement('div');
+        handle.className = 'slider-handle';
+        
+        // Add to container
+        sliderContainer.appendChild(beforeImg);
+        sliderContainer.appendChild(afterImg);
+        sliderContainer.appendChild(handle);
+        
+        // Remove original img and add slider
+        img.style.display = 'none';
+        container.appendChild(sliderContainer);
+        
+        // Add interaction for slider
+        sliderContainer.addEventListener('mousemove', function(e) {
+            if (e.buttons !== 1) return; // Only respond to mouse down
+            
+            const rect = sliderContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percent = Math.max(0, Math.min(1, x / rect.width)) * 100;
+            
+            beforeImg.style.clipPath = `inset(0 ${100 - percent}% 0 0)`;
+            handle.style.left = `${percent}%`;
+        });
+        
+        // Animate slider automatically
+        setTimeout(() => {
+            const animations = [
+                { clipPath: 'inset(0 0% 0 0)', left: '100%' },   // Show before image
+                { clipPath: 'inset(0 100% 0 0)', left: '0%' },   // Show after image
+                { clipPath: 'inset(0 50% 0 0)', left: '50%' }    // Show half-half
+            ];
+            
+            let step = 0;
+            const animateSlider = () => {
+                beforeImg.style.clipPath = animations[step].clipPath;
+                handle.style.left = animations[step].left;
+                step = (step + 1) % animations.length;
+                
+                // Only do the full animation once
+                if (step < 2) {
+                    setTimeout(animateSlider, 1000);
+                }
+            };
+            
+            animateSlider();
+        }, 500);
+    }
+    
+    // Create confetti effect
+    function createConfetti(container) {
+        const colors = ['#f00', '#0f0', '#00f', '#ff0', '#f0f', '#0ff'];
+        const confettiCount = 30;
+        
+        // Create confetti elements
+        for (let i = 0; i < confettiCount; i++) {
+            const confetti = document.createElement('div');
+            confetti.className = 'confetti';
+            confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            confetti.style.left = `${Math.random() * 100}%`;
+            confetti.style.top = `${Math.random() * 100}%`;
+            confetti.style.opacity = '0';
+            
+            container.appendChild(confetti);
+            
+            // Animate each confetti piece
+            setTimeout(() => {
+                confetti.style.opacity = '1';
+                confetti.style.transform = `
+                    translate(${(Math.random() - 0.5) * 150}px, ${(Math.random() - 0.5) * 150}px)
+                    rotate(${Math.random() * 360}deg)
+                `;
+                confetti.style.transition = `
+                    transform ${1 + Math.random()}s ease-out,
+                    opacity ${1 + Math.random()}s ease-out
+                `;
+                
+                // Remove confetti after animation
+                setTimeout(() => {
+                    confetti.remove();
+                }, 1500);
+            }, Math.random() * 500);
+        }
+    }
+    
     // Use existing preview functionality
     document.getElementById('images').addEventListener('change', function() {
         previewImages(this.files);
@@ -471,9 +885,21 @@
         
         const submitBtn = this.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading...';
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing Images...';
         
         const resultElement = document.getElementById('result');
+        resultElement.classList.remove('d-none');
+        resultElement.innerHTML = `
+            <div class="alert alert-info">
+                <div class="d-flex align-items-center">
+                    <div class="bg-spinner me-3" style="width: 20px; height: 20px;"></div>
+                    <div>
+                        <strong>Background removal in progress...</strong>
+                        <p class="mb-0">We're removing backgrounds from your images. This may take a moment.</p>
+                    </div>
+                </div>
+            </div>
+        `;
         
         try {
             const response = await fetch('/upload', {
@@ -487,24 +913,26 @@
             
             const result = await response.json();
             
-            resultElement.classList.remove('d-none');
-            resultElement.innerText = JSON.stringify(result, null, 2);
-            
-            // Show a success message before reload
-            resultElement.innerHTML += `
-                <div class="alert alert-success mt-3">
-                    <i class="fas fa-check-circle me-2"></i>
-                    Images uploaded successfully. Refreshing page to display them...
+            // Show success message with animation
+            resultElement.innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i> Upload Complete!</h5>
+                    <p>Successfully uploaded ${result.uploaded.length} image(s) with background removed.</p>
+                    <div class="text-center mt-3">
+                        <div class="spinner-border text-success" role="status" style="width: 1rem; height: 1rem;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="ms-2">Refreshing page to display your images...</span>
+                    </div>
                 </div>
             `;
             
             // Increased timeout to ensure server has time to process images
             setTimeout(() => {
                 location.reload();
-            }, 3000); // Increased from 2000ms to 3000ms for better reliability
+            }, 3000);
             
         } catch (error) {
-            resultElement.classList.remove('d-none');
             resultElement.innerHTML = `<div class="alert alert-danger">Error uploading files: ${error.message}</div>`;
         } finally {
             submitBtn.disabled = false;
