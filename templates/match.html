@@ -357,6 +357,17 @@
     </div>
 
     <div class="container">
+        <!-- Add global progress indicator for match page -->
+        <div id="globalProgressContainer" class="progress mb-4" style="display:none;">
+            <div id="globalProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div id="progressDetails" class="alert alert-info mb-4" style="display:none;">
+            <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                <div id="progressText">Processing...</div>
+            </div>
+        </div>
+        
         <!-- Match-making form -->
         <div class="upload-form">
             <form id="matchForm" enctype="multipart/form-data" class="row g-3 align-items-center">
@@ -682,18 +693,31 @@
           e.preventDefault();
           const formData = new FormData(this);
           
-          // Show loading animation
-          const loadingAnimation = document.getElementById("loadingAnimation");
-          const matchResultDiv = document.getElementById("matchResult");
+          // Show initial progress
+          showProgress(10, "Starting to analyze your match...");
           
-          loadingAnimation.classList.add("showing");
+          // Hide loading animation, we'll use the progress bar instead
+          const matchResultDiv = document.getElementById("matchResult");
           matchResultDiv.innerHTML = "";
           
+          // Create progress tracker
+          let progressInterval = setInterval(() => {
+              // Simulate progress updates (in a real app, this would come from server events)
+              const currentWidth = parseInt(document.getElementById('globalProgressBar').style.width) || 10;
+              if (currentWidth < 90) {  // Cap at 90% until we get completion from server
+                  showProgress(currentWidth + 2, `Analyzing your clothing match... ${currentWidth + 2}%`);
+              }
+          }, 600);
+          
           try {
+              showProgress(20, "Removing background from image...");
+              
               const response = await fetch("/match_upload", {
                   method: "POST",
                   body: formData
               });
+              
+              showProgress(70, "Finding perfect match...");
               
               if (!response.ok) {
                   throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
@@ -701,120 +725,140 @@
               
               const res = await response.json();
               
-              // Hide loading after a minimum time (for better UX)
-              setTimeout(() => {
-                  // Hide loading animation
-                  loadingAnimation.classList.remove("showing");
-                  
-                  if(res.error){
-                     matchResultDiv.innerHTML = `<div class="alert alert-danger">${res.error}</div>`;
-                     return;
-                  }
-                  const newItem = res.matched.new_item;
-                  const bestMatch = res.matched.best_match;
-                  
-                  const container = document.createElement('div');
-                  container.className = "comparison-container";
-                  
-                  const newDiv = document.createElement('div');
-                  newDiv.className = "item";
-                  newDiv.innerHTML = `
-                    <h3 class="item-header">New Item</h3>
-                    <div class="image-wrapper">
-                        <div class="image-loading">
-                            <div class="spinner-border text-primary mb-2" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <span>Loading image...</span>
+              // Clear the progress interval
+              clearInterval(progressInterval);
+              
+              // Show completion
+              showProgress(100, "Match found successfully!");
+              
+              // Hide loading animation
+              const loadingAnimation = document.getElementById("loadingAnimation");
+              if (loadingAnimation) loadingAnimation.classList.remove("showing");
+              
+              if(res.error){
+                  matchResultDiv.innerHTML = `<div class="alert alert-danger">${res.error}</div>`;
+                  return;
+              }
+              
+              const newItem = res.matched.new_item;
+              const bestMatch = res.matched.best_match;
+              
+              const container = document.createElement('div');
+              container.className = "comparison-container";
+              
+              const newDiv = document.createElement('div');
+              newDiv.className = "item";
+              newDiv.innerHTML = `
+                <h3 class="item-header">New Item</h3>
+                <div class="image-wrapper">
+                    <div class="image-loading">
+                        <div class="spinner-border text-primary mb-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
                         </div>
-                        <img src="/uploads/${newItem.filename}?t=${new Date().getTime()}&r=${Math.random()}" 
-                             alt="New Item" 
-                             data-filename="${newItem.filename}"
-                             data-valid="true"
-                             onload="this.previousElementSibling.style.display='none';"
-                             onerror="handleMatchImageError(this, '${newItem.filename}')">
+                        <span>Loading image...</span>
                     </div>
-                    <ul class="property-list">
-                      <li><span class="property-name">Label:</span> <span class="property-value">${newItem.label}</span></li>
-                      <li><span class="property-name">Wearable:</span> <span class="property-value">${newItem.wearable}</span></li>
-                      <li><span class="property-name">Costume:</span> <span class="property-value">${newItem.costume}</span></li>
-                      <li><span class="property-name">Sex:</span> <span class="property-value">${newItem.sex}</span></li>
-                      <li>
-                        <span class="property-name">Color:</span> 
-                        <span class="property-value">
-                          <span class="color-sample" style="background-color:${newItem.color};"></span>
-                          ${newItem.color}
-                        </span>
-                      </li>
-                      <li><span class="property-name">Pattern:</span> <span class="property-value">${newItem.pattern}</span></li>
-                    </ul>
-                  `;
-                  
-                  const matchDiv = document.createElement('div');
-                  matchDiv.className = "item";
-                  if(bestMatch){
-                    matchDiv.innerHTML = `
-                      <h3 class="item-header">Best Match</h3>
-                      <div class="image-wrapper">
-                          <div class="image-loading">
-                              <div class="spinner-border text-primary mb-2" role="status">
-                                  <span class="visually-hidden">Loading...</span>
-                              </div>
-                              <span>Loading image...</span>
+                    <img src="/uploads/${newItem.filename}?t=${new Date().getTime()}&r=${Math.random()}" 
+                         alt="New Item" 
+                         data-filename="${newItem.filename}"
+                         data-valid="true"
+                         onload="this.previousElementSibling.style.display='none';"
+                         onerror="handleMatchImageError(this, '${newItem.filename}')">
+                </div>
+                <ul class="property-list">
+                  <li><span class="property-name">Label:</span> <span class="property-value">${newItem.label}</span></li>
+                  <li><span class="property-name">Wearable:</span> <span class="property-value">${newItem.wearable}</span></li>
+                  <li><span class="property-name">Costume:</span> <span class="property-value">${newItem.costume}</span></li>
+                  <li><span class="property-name">Sex:</span> <span class="property-value">${newItem.sex}</span></li>
+                  <li>
+                    <span class="property-name">Color:</span> 
+                    <span class="property-value">
+                      <span class="color-sample" style="background-color:${newItem.color};"></span>
+                      ${newItem.color}
+                    </span>
+                  </li>
+                  <li><span class="property-name">Pattern:</span> <span class="property-value">${newItem.pattern}</span></li>
+                </ul>
+              `;
+              
+              const matchDiv = document.createElement('div');
+              matchDiv.className = "item";
+              if(bestMatch){
+                matchDiv.innerHTML = `
+                  <h3 class="item-header">Best Match</h3>
+                  <div class="image-wrapper">
+                      <div class="image-loading">
+                          <div class="spinner-border text-primary mb-2" role="status">
+                              <span class="visually-hidden">Loading...</span>
                           </div>
-                          <img src="/uploads/${bestMatch.filename}?t=${new Date().getTime()}" 
-                               alt="Best Match" 
-                               data-filename="${bestMatch.filename}"
-                               onload="this.previousElementSibling.style.display='none';"
-                               onerror="handleMatchImageError(this, '${bestMatch.filename}')">
+                          <span>Loading image...</span>
                       </div>
-                      <ul class="property-list">
-                        <li><span class="property-name">Label:</span> <span class="property-value">${bestMatch.data.label}</span></li>
-                        <li><span class="property-name">Wearable:</span> <span class="property-value">${bestMatch.data.wearable}</span></li>
-                        <li><span class="property-name">Costume:</span> <span class="property-value">${bestMatch.data.costume}</span></li>
-                        <li><span class="property-name">Sex:</span> <span class="property-value">${bestMatch.data.sex}</span></li>
-                        <li>
-                          <span class="property-name">Color:</span> 
-                          <span class="property-value">
-                            <span class="color-sample" style="background-color:${bestMatch.data.color};"></span>
-                            ${bestMatch.data.color}
-                          </span>
-                        </li>
-                        <li><span class="property-name">Pattern:</span> <span class="property-value">${bestMatch.data.pattern}</span></li>
-                        <li><span class="property-name">Similarity Score:</span> <span class="property-value">${bestMatch.score.toFixed(2)}</span></li>
-                      </ul>
-                    `;
-                  } else {
-                    matchDiv.innerHTML = `<h3 class="item-header">No Matching Candidate Found</h3>`;
-                  }
-                  
-                  container.appendChild(newDiv);
-                  container.appendChild(matchDiv);
-                  matchResultDiv.appendChild(container);
-                  
-                  // Add reason in a separate container
-                  if(bestMatch && res.matched.reason) {
-                    const reasonContainer = document.createElement('div');
-                    reasonContainer.className = "reason-container fade-in";
-                    reasonContainer.innerHTML = `
-                      <h3>Why These Match Well</h3>
-                      <p class="single-reason">${res.matched.reason}</p>
-                    `;
-                    matchResultDiv.appendChild(reasonContainer);
-                  }
-                  
-                  // Validate the result images after display
-                  setTimeout(() => {
-                      validateAllDisplayedImages();
-                  }, 1500);
-                  
-              }, 800); // Minimum display time for loading animation
-          } catch (error) {
-              // Handle any errors
-              loadingAnimation.classList.remove("showing");
-              matchResultDiv.innerHTML = `<div class="alert alert-danger">An error occurred: ${error.message}</div>`;
-          }
-      });
+                      <img src="/uploads/${bestMatch.filename}?t=${new Date().getTime()}" 
+                           alt="Best Match" 
+                           data-filename="${bestMatch.filename}"
+                           onload="this.previousElementSibling.style.display='none';"
+                           onerror="handleMatchImageError(this, '${bestMatch.filename}')">
+                  </div>
+                  <ul class="property-list">
+                    <li><span class="property-name">Label:</span> <span class="property-value">${bestMatch.data.label}</span></li>
+                    <li><span class="property-name">Wearable:</span> <span class="property-value">${bestMatch.data.wearable}</span></li>
+                    <li><span class="property-name">Costume:</span> <span class="property-value">${bestMatch.data.costume}</span></li>
+                    <li><span class="property-name">Sex:</span> <span class="property-value">${bestMatch.data.sex}</span></li>
+                    <li>
+                      <span class="property-name">Color:</span> 
+                      <span class="property-value">
+                        <span class="color-sample" style="background-color:${bestMatch.data.color};"></span>
+                        ${bestMatch.data.color}
+                      </span>
+                    </li>
+                    <li><span class="property-name">Pattern:</span> <span class="property-value">${bestMatch.data.pattern}</span></li>
+                    <li><span class="property-name">Similarity Score:</span> <span class="property-value">${bestMatch.score.toFixed(2)}</span></li>
+                  </ul>
+                `;
+              } else {
+                matchDiv.innerHTML = `<h3 class="item-header">No Matching Candidate Found</h3>`;
+              }
+              
+              container.appendChild(newDiv);
+              container.appendChild(matchDiv);
+              matchResultDiv.appendChild(container);
+              
+              // Add reason in a separate container
+              if(bestMatch && res.matched.reason) {
+                const reasonContainer = document.createElement('div');
+                reasonContainer.className = "reason-container fade-in";
+                reasonContainer.innerHTML = `
+                  <h3>Why These Match Well</h3>
+                  <p class="single-reason">${res.matched.reason}</p>
+                `;
+                matchResultDiv.appendChild(reasonContainer);
+              }
+              
+              // Validate the result images after display
+              setTimeout(() => {
+                  validateAllDisplayedImages();
+              }, 1500);
+              
+          }, 800); // Minimum display time for loading animation
+      } catch (error) {
+          // Clear the progress interval
+          clearInterval(progressInterval);
+          
+          // Show error in progress
+          showProgress(100, `Error: ${error.message}`);
+          document.getElementById('globalProgressBar').classList.remove('bg-primary');
+          document.getElementById('globalProgressBar').classList.add('bg-danger');
+          
+          // Hide loading after a minimum time
+          const loadingAnimation = document.getElementById("loadingAnimation");
+          if (loadingAnimation) loadingAnimation.classList.remove("showing");
+          matchResultDiv.innerHTML = `<div class="alert alert-danger">An error occurred: ${error.message}</div>`;
+          
+          // Fade out progress after error
+          setTimeout(() => {
+              hideProgress();
+          }, 3000);
+      }
+  });
       
       // Function to validate all currently displayed images
       function validateAllDisplayedImages() {
@@ -862,6 +906,34 @@
         
         // Log retry attempt
         console.log(`Retrying image: ${filename}`);
+      }
+      
+      // Add functions to update progress indicator
+      function showProgress(percent, text) {
+          const progressContainer = document.getElementById('globalProgressContainer');
+          const progressBar = document.getElementById('globalProgressBar');
+          const progressText = document.getElementById('progressText');
+          
+          if (!progressContainer || !progressBar || !progressText) return;
+          
+          // Show the progress elements
+          progressContainer.style.display = 'flex';
+          document.getElementById('progressDetails').style.display = 'block';
+          
+          // Update progress bar
+          progressBar.style.width = `${percent}%`;
+          progressBar.setAttribute('aria-valuenow', percent);
+          
+          // Update text
+          progressText.textContent = text || `Processing ${percent}%`;
+      }
+      
+      function hideProgress() {
+          const progressContainer = document.getElementById('globalProgressContainer');
+          const progressDetails = document.getElementById('progressDetails');
+          
+          if (progressContainer) progressContainer.style.display = 'none';
+          if (progressDetails) progressDetails.style.display = 'none';
       }
   </script>
 

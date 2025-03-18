@@ -476,6 +476,17 @@
     </div>
 
     <div class="container">
+        <!-- Add global progress indicator -->
+        <div id="globalProgressContainer" class="progress mb-4" style="display:none;">
+            <div id="globalProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div id="progressDetails" class="alert alert-info mb-4" style="display:none;">
+            <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                <div id="progressText">Processing...</div>
+            </div>
+        </div>
+        
         <!-- Navigation Button -->
         <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-4">
             <a href="/match" class="btn btn-primary me-2">
@@ -887,25 +898,29 @@
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing Images...';
         
-        const resultElement = document.getElementById('result');
-        resultElement.classList.remove('d-none');
-        resultElement.innerHTML = `
-            <div class="alert alert-info">
-                <div class="d-flex align-items-center">
-                    <div class="bg-spinner me-3" style="width: 20px; height: 20px;"></div>
-                    <div>
-                        <strong>Background removal in progress...</strong>
-                        <p class="mb-0">We're removing backgrounds from your images. This may take a moment.</p>
-                    </div>
-                </div>
-            </div>
-        `;
+        // Show initial progress
+        showProgress(10, `Starting to process ${files.length} file(s)...`);
+        
+        // Create progress tracker
+        let progressInterval = setInterval(() => {
+            // Simulate progress updates (in a real app, this would come from server events)
+            const currentWidth = parseInt(document.getElementById('globalProgressBar').style.width) || 10;
+            if (currentWidth < 90) {  // Cap at 90% until we get completion from server
+                showProgress(currentWidth + 1, `Processing images... ${currentWidth + 1}%`);
+            }
+        }, 500);
         
         try {
+            // Start upload
+            showProgress(20, "Uploading images...");
+            
             const response = await fetch('/upload', {
                 method: 'POST',
                 body: formData,
             });
+            
+            // Update progress based on response
+            showProgress(75, "Processing on server...");
             
             if (!response.ok) {
                 throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
@@ -913,7 +928,14 @@
             
             const result = await response.json();
             
-            // Show success message with animation
+            // Clear the progress interval
+            clearInterval(progressInterval);
+            
+            // Show completion
+            showProgress(100, `Successfully processed ${result.uploaded.length} image(s)`);
+            
+            const resultElement = document.getElementById('result');
+            resultElement.classList.remove('d-none');
             resultElement.innerHTML = `
                 <div class="alert alert-success">
                     <h5><i class="fas fa-check-circle me-2"></i> Upload Complete!</h5>
@@ -927,13 +949,40 @@
                 </div>
             `;
             
-            // Increased timeout to ensure server has time to process images
+            // Fade out progress after completion
+            setTimeout(() => {
+                const progressBar = document.getElementById('globalProgressBar');
+                if (progressBar) {
+                    progressBar.classList.remove('progress-bar-animated');
+                }
+                
+                setTimeout(() => {
+                    hideProgress();
+                }, 1000);
+            }, 1500);
+            
+            // Reload page after delay
             setTimeout(() => {
                 location.reload();
             }, 3000);
             
         } catch (error) {
+            // Clear the progress interval
+            clearInterval(progressInterval);
+            
+            // Show error in progress
+            showProgress(100, `Error: ${error.message}`);
+            document.getElementById('globalProgressBar').classList.remove('bg-primary');
+            document.getElementById('globalProgressBar').classList.add('bg-danger');
+            
+            const resultElement = document.getElementById('result');
+            resultElement.classList.remove('d-none');
             resultElement.innerHTML = `<div class="alert alert-danger">Error uploading files: ${error.message}</div>`;
+            
+            // Fade out progress after error
+            setTimeout(() => {
+                hideProgress();
+            }, 3000);
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Multiple';
@@ -1158,6 +1207,143 @@
                 img.dataset.retried = '';
             }
         });
+    });
+
+    // Add functions to update progress indicator
+    function showProgress(percent, text) {
+        const progressContainer = document.getElementById('globalProgressContainer');
+        const progressBar = document.getElementById('globalProgressBar');
+        const progressText = document.getElementById('progressText');
+        
+        if (!progressContainer || !progressBar || !progressText) return;
+        
+        // Show the progress elements
+        progressContainer.style.display = 'flex';
+        document.getElementById('progressDetails').style.display = 'block';
+        
+        // Update progress bar
+        progressBar.style.width = `${percent}%`;
+        progressBar.setAttribute('aria-valuenow', percent);
+        
+        // Update text
+        progressText.textContent = text || `Processing ${percent}%`;
+    }
+    
+    function hideProgress() {
+        const progressContainer = document.getElementById('globalProgressContainer');
+        const progressDetails = document.getElementById('progressDetails');
+        
+        if (progressContainer) progressContainer.style.display = 'none';
+        if (progressDetails) progressDetails.style.display = 'none';
+    }
+    
+    // Modify upload form handler to update progress
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const files = document.getElementById('images').files;
+        if (files.length === 0) {
+            alert('Please select at least one image to upload.');
+            return;
+        }
+        
+        const formData = new FormData();
+        for(let i = 0; i < files.length; i++) {
+            formData.append('images', files[i]);
+        }
+        
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing Images...';
+        
+        // Show initial progress
+        showProgress(10, `Starting to process ${files.length} file(s)...`);
+        
+        // Create progress tracker
+        let progressInterval = setInterval(() => {
+            // Simulate progress updates (in a real app, this would come from server events)
+            const currentWidth = parseInt(document.getElementById('globalProgressBar').style.width) || 10;
+            if (currentWidth < 90) {  // Cap at 90% until we get completion from server
+                showProgress(currentWidth + 1, `Processing images... ${currentWidth + 1}%`);
+            }
+        }, 500);
+        
+        try {
+            // Start upload
+            showProgress(20, "Uploading images...");
+            
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            });
+            
+            // Update progress based on response
+            showProgress(75, "Processing on server...");
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            
+            // Clear the progress interval
+            clearInterval(progressInterval);
+            
+            // Show completion
+            showProgress(100, `Successfully processed ${result.uploaded.length} image(s)`);
+            
+            const resultElement = document.getElementById('result');
+            resultElement.classList.remove('d-none');
+            resultElement.innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i> Upload Complete!</h5>
+                    <p>Successfully uploaded ${result.uploaded.length} image(s) with background removed.</p>
+                    <div class="text-center mt-3">
+                        <div class="spinner-border text-success" role="status" style="width: 1rem; height: 1rem;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="ms-2">Refreshing page to display your images...</span>
+                    </div>
+                </div>
+            `;
+            
+            // Fade out progress after completion
+            setTimeout(() => {
+                const progressBar = document.getElementById('globalProgressBar');
+                if (progressBar) {
+                    progressBar.classList.remove('progress-bar-animated');
+                }
+                
+                setTimeout(() => {
+                    hideProgress();
+                }, 1000);
+            }, 1500);
+            
+            // Reload page after delay
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+            
+        } catch (error) {
+            // Clear the progress interval
+            clearInterval(progressInterval);
+            
+            // Show error in progress
+            showProgress(100, `Error: ${error.message}`);
+            document.getElementById('globalProgressBar').classList.remove('bg-primary');
+            document.getElementById('globalProgressBar').classList.add('bg-danger');
+            
+            const resultElement = document.getElementById('result');
+            resultElement.classList.remove('d-none');
+            resultElement.innerHTML = `<div class="alert alert-danger">Error uploading files: ${error.message}</div>`;
+            
+            // Fade out progress after error
+            setTimeout(() => {
+                hideProgress();
+            }, 3000);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Multiple';
+        }
     });
     </script>
 

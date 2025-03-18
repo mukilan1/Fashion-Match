@@ -1,13 +1,13 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
+import sys
+import time
 from werkzeug.utils import secure_filename
 from model import classify_cloth  # Our clothing classifier
 import json
 from PIL import Image
 import numpy as np
-from sklearn.cluster import KMeans
 import re
-from hand_classifier import predict_hand_type  # Our hand classifier
 from sentence_transformers import SentenceTransformer, util
 from transformers import pipeline  # NEW import
 import requests  # NEW import for local API call
@@ -15,6 +15,29 @@ import ollama  # ensure ollama is imported
 import shutil  # Add this import for file operations
 from rembg import remove  # Add this import for background removal
 import io  # Add this for handling image data
+from image_analyzer import ClothingImageAnalyzer  # Import our new image analyzer
+
+# Add a progress indicator function
+def show_progress(operation, percent=0, status="", final=False):
+    """
+    Display a progress indicator in the console.
+    
+    Args:
+        operation: String describing the current operation
+        percent: Progress percentage (0-100)
+        status: Additional status message
+        final: Whether this is the final update for this operation
+    """
+    bar_length = 20
+    filled_length = int(bar_length * percent / 100)
+    bar = '■' * filled_length + '□' * (bar_length - filled_length)
+    
+    if final:
+        sys.stdout.write(f"\r{operation}: [{bar}] {percent:.1f}% - {status} ✓ Completed\n")
+        sys.stdout.flush()
+    else:
+        sys.stdout.write(f"\r{operation}: [{bar}] {percent:.1f}% - {status}")
+        sys.stdout.flush()
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
@@ -24,6 +47,11 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 LABELS_FILE = "labels.json"
 MATCHES_FILE = "matches.json"
+
+# Initialize the image analyzer with progress reporting
+show_progress("Initializing image analyzer", 0, "Loading modules")
+image_analyzer = ClothingImageAnalyzer(use_vqa=True, use_ml_model=True)
+show_progress("Initializing image analyzer", 100, "Ready", final=True)
 
 def load_labels():
     if os.path.exists(LABELS_FILE):
@@ -44,106 +72,6 @@ def load_matches():
 def save_matches(matches):
     with open(MATCHES_FILE, "w") as f:
         json.dump(matches, f)
-
-# Determine if a garment is top or bottom wearable.
-def determine_wearable_type(label):
-    label_lower = label.lower()
-    if any(kw in label_lower for kw in ["shirt", "suit", "jacket", "blouse", "sweater", "t-shirt", "vest"]):
-        return "top wearable"
-    if any(kw in label_lower for kw in ["jean", "trouser", "shorts", "skirt", "trunks"]):  # Added 'trunks'
-        return "bottom wearable"
-    return "top wearable"  # Default if unclear
-
-def determine_costume_type(label):
-    label_lower = label.lower()
-    if any(word in label_lower for word in ["suit", "tux", "formal"]):
-        return "formal"
-    if any(word in label_lower for word in ["party", "dress", "gown"]):
-        return "party"
-    return "casual"
-
-def determine_pattern_type(label):
-    label_lower = label.lower()
-    patterns = [
-        (r'\bpolka\s*dot\b', "polka dot"),
-        (r'\bstriped\b', "striped"),
-        (r'\bchecked\b', "checked"),
-        (r'\bplaid\b', "plaid"),
-        (r'\bfloral\b', "floral"),
-        (r'\bpaisley\b', "paisley"),
-        (r'\bcamouflage\b', "camouflage"),
-        (r'\bgeometric\b', "geometric"),
-        (r'\bgraphic\b', "graphic"),
-        (r'\bprint(ed)?\b', "printed"),
-        (r'\bdotted\b', "dot pattern"),
-        (r'\bdot\b', "dot pattern")
-    ]
-    for regex, pattern in patterns:
-        if re.search(regex, label_lower):
-            return pattern
-    return "plain"
-
-def extract_dominant_color(image_path):
-    img = Image.open(image_path).convert('RGB')
-    width, height = img.size
-    # Crop center region to avoid background
-    img_cropped = img.crop((width*0.25, height*0.25, width*0.75, height*0.75)).resize((150,150))
-    ar = np.array(img_cropped).reshape(-1, 3)
-    kmeans = KMeans(n_clusters=3, random_state=0).fit(ar)
-    counts = np.bincount(kmeans.labels_)
-    dominant_color = tuple(int(x) for x in kmeans.cluster_centers_[np.argmax(counts)])
-    
-    basic_colors = {
-        'red': (255, 0, 0),
-        'green': (0, 128, 0),
-        'blue': (0, 0, 255),
-        'yellow': (255, 255, 0),
-        'orange': (255, 165, 0),
-        'purple': (128, 0, 128),
-        'pink': (255, 192, 203),
-        'brown': (165, 42, 42),
-        'grey': (128, 128, 128),
-        'black': (0, 0, 0),
-        'white': (255, 255, 255)
-    }
-    def closest_color(requested):
-        best, min_dist = None, float('inf')
-        for name, rgb in basic_colors.items():
-            dist = sum((requested[i]-rgb[i])**2 for i in range(3))
-            if dist < min_dist:
-                min_dist = dist
-                best = name
-        return best
-    return closest_color(dominant_color)
-
-def determine_sex(label):
-    label_lower = label.lower()
-    if any(word in label_lower for word in ["dress", "gown", "skirt", "blouse", "heels"]):
-        return "female"
-    if any(word in label_lower for word in ["suit", "tux", "man", "mens", "trouser", "male"]):
-        return "male"
-    return "unisex"
-
-def determine_hand_style(label, image_path):
-    try:
-        return predict_hand_type(image_path)
-    except Exception as e:
-        label_lower = label.lower()
-        if any(word in label_lower for word in ["sleeveless", "tank"]):
-            return "no hand"
-        elif any(word in label_lower for word in ["half sleeve", "short sleeve"]):
-            return "half hand"
-        elif any(word in label_lower for word in ["full sleeve", "long sleeve"]):
-            return "full hand"
-        return "undetermined"
-
-# Initialize SBERT model for semantic matching.
-sbert_model = SentenceTransformer('all-mpnet-base-v2')
-# Initialize text-generation pipeline with a lightweight pretrained model.
-reason_generator = pipeline("text2text-generation", model="google/flan-t5-small", max_new_tokens=50)  # UPDATED
-
-# Set REASON_MODEL to either "deepseek-r1" or "llama3.2"
-REASON_MODEL = "deepseek-r1"  # or "llama3.2" as needed
 
 def generate_dynamic_reason(new_item, candidate, score):
     prompt = (
@@ -232,28 +160,123 @@ def remove_background(input_image):
         PIL Image with transparent background
     """
     try:
+        show_progress("Removing background", 10, "Preparing image")
         # Convert PIL Image to bytes if needed
         if isinstance(input_image, Image.Image):
             img_byte_arr = io.BytesIO()
             input_image.save(img_byte_arr, format='PNG')
             img_data = img_byte_arr.getvalue()
+            show_progress("Removing background", 30, "Image converted")
         else:
             # Assume input is a file path
             with open(input_image, 'rb') as img_file:
                 img_data = img_file.read()
+                show_progress("Removing background", 30, "Image loaded")
         
         # Process the image to remove background
+        show_progress("Removing background", 50, "Processing")
         output_data = remove(img_data)
+        show_progress("Removing background", 80, "Background removed")
         
         # Convert back to PIL Image
         result_image = Image.open(io.BytesIO(output_data))
+        show_progress("Removing background", 100, "Complete", final=True)
         return result_image
     except Exception as e:
-        print(f"Error removing background: {str(e)}")
+        show_progress("Removing background", 100, f"Failed: {str(e)}", final=True)
         # Return the original image if background removal fails
         if isinstance(input_image, str) and os.path.exists(input_image):
             return Image.open(input_image)
         return input_image
+
+def parse_clothing_analysis(classification):
+    """
+    Parse a detailed clothing classification string into separate components.
+    
+    For example:
+    "Men's Top (Full body garment: Suit), gray, solid color pattern, long sleeve"
+    becomes:
+    {
+        "wearable": "Top",
+        "sex": "Men's",
+        "color": "gray",
+        "pattern": "solid color",
+        "hand": "long sleeve",
+        "costume": "formal"
+    }
+    """
+    result = {
+        "wearable": "unknown",
+        "sex": "unknown",
+        "color": "unknown",
+        "pattern": "unknown",
+        "hand": "unknown",
+        "costume": "unknown"
+    }
+    
+    if not classification or classification == "unknown":
+        return result
+    
+    # Extract gender/sex information
+    if classification.startswith("Men's"):
+        result["sex"] = "Men's"
+        classification = classification[6:].strip()  # Remove "Men's " prefix
+    elif classification.startswith("Women's"):
+        result["sex"] = "Women's"
+        classification = classification[8:].strip()  # Remove "Women's " prefix
+    
+    # Extract wearable type (Top or Bottom)
+    if classification.startswith("Top"):
+        result["wearable"] = "top wearable"
+    elif classification.startswith("Bottom"):
+        result["wearable"] = "bottom wearable"
+    
+    # Extract full body garment type (usually in parentheses)
+    if "Full body garment:" in classification:
+        result["costume"] = "formal"
+        if "Dress" in classification:
+            result["wearable"] = "dress"  # Special category for dresses
+    
+    # Extract color, pattern, and sleeve information
+    parts = classification.split(',')
+    for part in parts:
+        part = part.strip().lower()
+        
+        # Check for colors
+        colors = ["black", "white", "red", "blue", "green", "yellow", "purple", "pink", "orange", 
+                 "brown", "gray", "grey", "navy", "teal", "maroon", "olive", "tan"]
+        for color in colors:
+            if color in part:
+                result["color"] = color
+                break
+        
+        # Check for patterns
+        if "pattern" in part or any(p in part for p in ["solid", "striped", "checkered", "plaid", "floral", "polka dot", "dotted"]):
+            if "solid" in part:
+                result["pattern"] = "solid"
+            elif "striped" in part:
+                result["pattern"] = "striped"
+            elif "checkered" in part or "plaid" in part:
+                result["pattern"] = "checkered"
+            elif "floral" in part:
+                result["pattern"] = "floral"
+            elif "polka dot" in part or "dotted" in part:
+                result["pattern"] = "polka dot"
+            else:
+                result["pattern"] = part
+        
+        # Check for sleeve type
+        if "sleeve" in part:
+            if "long" in part:
+                result["hand"] = "full hand"
+            elif "short" in part or "half" in part:
+                result["hand"] = "half hand"
+            elif "no" in part or "sleeveless" in part:
+                result["hand"] = "no hand"
+            else:
+                result["hand"] = part
+    
+    return result
 
 @app.route("/")
 def index():
@@ -309,18 +332,22 @@ def upload():
         except Exception as e:
             return jsonify({"error": f"Failed to create upload directory: {str(e)}"}), 500
     
-    for file in files:
+    total_files = len(files)
+    for i, file in enumerate(files):
         if file.filename == "":
             continue
         try:
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30, file.filename)
             filename = secure_filename(file.filename)
             
             # Create temporary file path
             temp_path = os.path.join("/tmp", filename)
             file.save(temp_path)
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 10, "File saved")
             
             # Remove background from image
             try:
+                show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 20, "Removing background")
                 processed_image = remove_background(temp_path)
                 
                 # Save processed image (with transparent background)
@@ -329,6 +356,7 @@ def upload():
                 
                 # Save with transparent background
                 processed_image.save(file_path, format="PNG")
+                show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 40, "Background removed")
                 
                 print(f"Background removed and saved: {filename}")
             except Exception as e:
@@ -342,40 +370,47 @@ def upload():
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             
-            # Process the image
+            # Process the image with our ClothingImageAnalyzer
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 70, "Classifying image")
             label = classify_cloth(file_path)
-            wearable = determine_wearable_type(label)
-            color = extract_dominant_color(file_path)
-            costume = determine_costume_type(label)
-            pattern = determine_pattern_type(label)
-            sex = determine_sex(label)
-            hand = determine_hand_style(label, file_path) if wearable == "top wearable" else "N/A"
+            
+            # Use the image analyzer to get clothing details
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 80, "Analyzing details")
+            analysis_results = image_analyzer.analyze_image(file_path)
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 90, "Analysis completed")
+            
+            # Parse classification into separate fields
+            classification = analysis_results.get("classification", "unknown")
+            parsed_details = parse_clothing_analysis(classification)
             
             # Store in labels
             labels[filename] = {
                 "label": label,
-                "wearable": wearable,
-                "costume": costume,
-                "color": color,
-                "pattern": pattern,
-                "sex": sex,
-                "hand": hand
+                "wearable": parsed_details["wearable"],
+                "costume": parsed_details["costume"],
+                "color": parsed_details["color"],
+                "pattern": parsed_details["pattern"],
+                "sex": parsed_details["sex"],
+                "hand": parsed_details["hand"]
             }
             
             results.append({
                 "filename": filename,
                 "label": label,
-                "wearable": wearable,
-                "costume": costume,
-                "color": color,
-                "pattern": pattern,
-                "sex": sex,
-                "hand": hand,
+                "wearable": parsed_details["wearable"],
+                "costume": parsed_details["costume"],
+                "color": parsed_details["color"],
+                "pattern": parsed_details["pattern"],
+                "sex": parsed_details["sex"],
+                "hand": parsed_details["hand"],
                 "path": file_path,
-                "background_removed": True
+                "background_removed": True,
+                "analysis_confidence": analysis_results.get("confidence", 0)
             })
+            show_progress(f"Processing file {i+1}/{total_files}", (i + 1) / total_files * 100, "Complete", final=(i==total_files-1))
         except Exception as e:
             # Continue with other files if one fails
+            show_progress(f"Processing file {i+1}/{total_files}", 100, f"Error: {str(e)}", final=True)
             print(f"Error processing {file.filename}: {str(e)}")
             results.append({
                 "filename": file.filename if file.filename else "unknown",
@@ -384,11 +419,18 @@ def upload():
     
     # Save the updated labels
     try:
+        show_progress("Saving metadata", 50, "Writing to disk")
         save_labels(labels)
+        show_progress("Saving metadata", 100, "Complete", final=True)
     except Exception as e:
+        show_progress("Saving metadata", 100, f"Failed: {str(e)}", final=True)
         return jsonify({"error": f"Failed to save labels: {str(e)}", "partial_results": results}), 500
-        
-    return jsonify({"uploaded": results}), 200
+    
+    # Include progress information in the response
+    return jsonify({
+        "uploaded": results,
+        "progress_complete": True
+    }), 200
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
@@ -508,20 +550,24 @@ def match_upload():
     file = request.files["match_image"]
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
-        
+    
+    show_progress("Match processing", 10, "Starting match analysis")    
     filename = secure_filename(file.filename)
     
     # Create temporary file path
     temp_path = os.path.join("/tmp", filename)
     file.save(temp_path)
+    show_progress("Match processing", 20, "File saved")
     
     # Remove background from image
     try:
+        show_progress("Match processing", 30, "Removing background")
         processed_image = remove_background(temp_path)
         
         # Save processed image (with transparent background)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         processed_image.save(file_path, format="PNG")
+        show_progress("Match processing", 40, "Background removed")
     except Exception as e:
         print(f"Background removal failed for {filename}: {str(e)}")
         # If background removal fails, use original image
@@ -532,27 +578,35 @@ def match_upload():
     if os.path.exists(temp_path):
         os.remove(temp_path)
     
+    # Process the image
+    show_progress("Match processing", 50, "Analyzing image")
     new_label = classify_cloth(file_path)
-    new_wearable = determine_wearable_type(new_label)
-    new_color = extract_dominant_color(file_path)
-    new_costume = determine_costume_type(new_label)
-    new_pattern = determine_pattern_type(new_label)
-    new_sex = determine_sex(new_label)
-    new_hand = determine_hand_style(new_label, file_path) if new_wearable=="top wearable" else "N/A"
     
-    new_text = f"{new_label} {new_costume} {new_pattern} {new_color} {new_sex} {new_hand}"
+    # Use the image analyzer to get clothing details
+    analysis_results = image_analyzer.analyze_image(file_path)
+    
+    # Parse classification into separate fields
+    classification = analysis_results.get("classification", "unknown")
+    parsed_details = parse_clothing_analysis(classification)
+    new_wearable = parsed_details["wearable"]
+    
+    show_progress("Match processing", 60, "Processing completed")
+    
+    new_text = f"{new_label} {new_wearable} unknown unknown unknown unknown"
     stored = load_labels()
     candidates = []
     for fname, data in stored.items():
-        if new_wearable == "top wearable" and data.get("wearable") != "bottom wearable":
+        if fname == filename:  # Skip matching with self
             continue
-        if new_wearable == "bottom wearable" and data.get("wearable") != "top wearable":
-            continue
-        cand_text = f"{data.get('label','')} {data.get('costume','')} {data.get('pattern','')} {data.get('color','')} {data.get('sex','')} {data.get('hand','')}"
+        cand_text = f"{data.get('label','')} {data.get('wearable','')} {data.get('costume','')} {data.get('pattern','')} {data.get('color','')} {data.get('sex','')}"
         candidates.append((fname, cand_text, data))
     if not candidates:
+        show_progress("Match processing", 100, "No candidates found", final=True)
         return jsonify({"error": "No candidate found for matching."}), 404
     
+    # Initialize SBERT model for semantic matching.
+    show_progress("Match processing", 70, "Finding best match")
+    sbert_model = SentenceTransformer('all-mpnet-base-v2')
     new_embedding = sbert_model.encode(new_text, convert_to_tensor=True)
     best_candidate, best_score = None, -1
     for fname, cand_text, data in candidates:
@@ -561,27 +615,30 @@ def match_upload():
         if score > best_score:
             best_score = score
             best_candidate = {"filename": fname, "data": data, "score": best_score}
+    show_progress("Match processing", 80, "Match found")
     
     result = {
         "new_item": {
             "filename": filename,
             "label": new_label,
             "wearable": new_wearable,
-            "color": new_color,
-            "costume": new_costume,
-            "pattern": new_pattern,
-            "sex": new_sex,
-            "hand": new_hand
+            "color": "unknown",
+            "costume": "unknown",
+            "pattern": "unknown",
+            "sex": "unknown",
+            "hand": "unknown"
         },
         "best_match": best_candidate
     }
     
     # Instead of a fixed reason, generate a dynamic reason using our NLP model.
+    show_progress("Match processing", 90, "Generating match explanation")
     reason_text = generate_dynamic_reason(result["new_item"], best_candidate["data"], best_score)
     result["reason"] = reason_text
     matches = load_matches()
     matches.append(result)
     save_matches(matches)
+    show_progress("Match processing", 100, "Match completed", final=True)
     
     return jsonify({"matched": result}), 200
 
@@ -602,6 +659,10 @@ def auto_match():
         elif data.get("wearable") == "bottom wearable":
             bottoms.append({"filename": filename, "text": text, "data": data})
     auto_matches = []
+    
+    # Initialize SBERT model for semantic matching
+    sbert_model = SentenceTransformer('all-mpnet-base-v2')
+    
     for top in tops:
         top_emb = sbert_model.encode(top["text"], convert_to_tensor=True)
         best_bottom, best_score = None, -1
@@ -670,8 +731,6 @@ def validate_image(filename):
 def pose_rigging():
     all_images = get_all_images()
     return render_template('pose_visualization.html', images=all_images)
-
-# Update the get_all_images function to properly use the labels.json data
 
 def get_all_images():
     """Retrieve all images from the database or storage.
@@ -750,6 +809,7 @@ def page_not_found(e):
 
 # Modify the if __name__ == '__main__' block if needed
 if __name__ == '__main__':
+    show_progress("Starting server", 100, "Server initialized", final=True)
     print("Fashion application running with pose rigging feature at: http://127.0.0.1:5000/")
     print("Access pose rigging visualization at: http://127.0.0.1:5000/pose_rigging")
     app.run(debug=True, threaded=True)
