@@ -17,6 +17,7 @@ import io
 from Model_Props.image_analyzer import ClothingImageAnalyzer
 from Model_Props.color_analyzer import analyze_colors
 from Model_Props.gender_analyzer import analyze_gender
+from Model_Props.costume_analyzer import analyze_costume
 
 # Add a progress indicator function
 def show_progress(operation, percent=0, status="", final=False):
@@ -390,7 +391,7 @@ def upload():
                     wearable_position = "top wearable"
             
             # 2. Color analysis
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 45, "Analyzing colors")
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 40, "Analyzing colors")
             try:
                 color_info = analyze_colors(file_path)
                 primary_color = color_info['primary_color']
@@ -401,7 +402,7 @@ def upload():
                 colors_text = "unknown"
             
             # 3. Gender analysis (integrated into upload flow)
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 60, "Determining gender")
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 50, "Determining gender")
             # Create metadata dict from what we know so far
             metadata = {
                 "label": label,
@@ -419,8 +420,31 @@ def upload():
                 gender = "unknown"
                 gender_confidence = 0
                 gender_probabilities = {"men": 0.33, "women": 0.33, "unisex": 0.34}
+                
+            # 4. NEW: Costume analysis (formal, casual, party, etc.)
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 60, "Determining costume style")
+            # Update metadata with all we've learned so far
+            metadata.update({
+                "gender": gender,
+                "label": label,
+                "color": primary_color,
+                "pattern": "unknown"  # Will be updated if we detect a pattern
+            })
+            try:
+                costume_info = analyze_costume(file_path, metadata)
+                costume = costume_info.get("costume", "unknown")
+                costume_display_name = costume_info.get("costume_display_name", "Unknown")
+                costume_confidence = costume_info.get("confidence", 0)
+                costume_description = costume_info.get("description", "")
+                print(f"Detected costume: {costume_display_name} (confidence: {costume_confidence:.2f})")
+            except Exception as e:
+                print(f"Costume analysis failed: {str(e)}")
+                costume = "unknown"
+                costume_display_name = "Unknown"
+                costume_confidence = 0
+                costume_description = ""
             
-            # 4. Pattern detection (simplified here)
+            # 5. Pattern detection (simplified here)
             pattern = "unknown"
             if "pattern" in label.lower():
                 if "solid" in label.lower():
@@ -430,7 +454,7 @@ def upload():
                 elif "floral" in label.lower():
                     pattern = "floral"
             
-            # 5. Sleeve/hand type detection
+            # 6. Sleeve/hand type detection
             hand = "unknown"
             if "sleeve" in label.lower():
                 if "long" in label.lower():
@@ -442,11 +466,14 @@ def upload():
             
             show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 75, "All analysis completed")
             
-            # Store all metadata together
+            # Store all metadata together - now with costume information
             labels[filename] = {
                 "label": label,
                 "wearable": wearable_position,
-                "costume": "unknown", 
+                "costume": costume, 
+                "costume_display": costume_display_name,
+                "costume_confidence": costume_confidence,
+                "costume_description": costume_description,
                 "color": primary_color,
                 "color_detail": colors_text,
                 "pattern": pattern,
@@ -455,12 +482,15 @@ def upload():
                 "hand": hand
             }
             
-            # Return comprehensive analysis results to frontend
+            # Return comprehensive analysis results to frontend including costume info
             results.append({
                 "filename": filename,
                 "label": label,
                 "wearable": wearable_position,
-                "costume": "unknown",
+                "costume": costume,
+                "costume_display": costume_display_name,
+                "costume_confidence": costume_confidence,
+                "costume_description": costume_description,
                 "color": primary_color,
                 "color_detail": colors_text,
                 "pattern": pattern,
@@ -925,6 +955,127 @@ def analyze_image_gender(filename):
     except Exception as e:
         print(f"Error analyzing gender in {filename}: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+# Add new route for costume page
+@app.route("/costume", methods=["GET"])
+def costume_page():
+    # Synchronize the database with actual files
+    synchronize_labels()
+    
+    # Get all images with their metadata
+    images_data = get_all_images()
+    
+    # Get list of all costume categories for filtering
+    costume_categories = [
+        {"id": "formal", "name": "Formal"},
+        {"id": "business", "name": "Business"},
+        {"id": "business_casual", "name": "Business Casual"},
+        {"id": "casual", "name": "Casual"},
+        {"id": "party", "name": "Party"},
+        {"id": "sports", "name": "Sports/Athletic"},
+        {"id": "lounge", "name": "Lounge/Sleepwear"},
+        {"id": "ethnic", "name": "Ethnic/Cultural"},
+        {"id": "vintage", "name": "Vintage/Retro"},
+        {"id": "beach", "name": "Beach/Swim"},
+        {"id": "unknown", "name": "Unknown"}
+    ]
+    
+    return render_template("costume.html", 
+                          images=images_data, 
+                          categories=costume_categories)
+
+# Add a route to analyze costume for a specific image
+@app.route("/analyze_costume/<filename>", methods=["POST"])
+def analyze_image_costume(filename):
+    """Analyze an image to determine its costume/outfit style."""
+    # Secure the filename
+    secure_name = secure_filename(filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+    
+    try:
+        # Get existing metadata to help with analysis
+        labels = load_labels()
+        metadata = labels.get(secure_name, {})
+        
+        # Run costume analysis
+        costume_info = analyze_costume(file_path, metadata)
+        
+        # Update labels with the costume information
+        if secure_name in labels:
+            labels[secure_name]['costume'] = costume_info['costume']
+            labels[secure_name]['costume_display'] = costume_info['costume_display_name']
+            labels[secure_name]['costume_confidence'] = costume_info['confidence']
+            labels[secure_name]['costume_description'] = costume_info.get('description', '')
+            save_labels(labels)
+        
+        return jsonify({
+            "filename": filename,
+            "costume_analysis": costume_info,
+            "updated": True
+        })
+    except Exception as e:
+        print(f"Error analyzing costume in {filename}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# Update get_all_images function to include costume information
+def get_all_images():
+    """Retrieve all images from the database or storage."""
+    # First, try to use the labels.json file which has the correct metadata
+    labels = load_labels()
+    
+    # Get the list of actual files in the uploads directory
+    upload_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    files = os.listdir(upload_dir) if os.path.exists(upload_dir) else []
+    
+    images = []
+    for filename in files:
+        # Skip non-image files
+        if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+            continue
+            
+        # Get metadata from labels.json if available
+        entry = labels.get(filename, {})
+        
+        # Check if file exists and is a valid image
+        file_path = os.path.join(upload_dir, filename)
+        is_valid_image = os.path.exists(file_path)
+        
+        if is_valid_image:
+            try:
+                # Verify the image is valid
+                with Image.open(file_path) as img:
+                    img.verify()
+            except Exception:
+                is_valid_image = False
+        
+        # Get costume information with confidence
+        costume = entry.get("costume", "unknown")
+        costume_display = entry.get("costume_display", "Unknown")
+        costume_confidence = entry.get("costume_confidence", 0)
+        costume_description = entry.get("costume_description", "")
+        
+        # Add the image data with complete information
+        images.append({
+            "filename": filename,
+            "label": entry.get("label", os.path.splitext(filename)[0]),
+            "wearable": entry.get("wearable", "Unknown"),
+            "costume": costume,
+            "costume_display": costume_display,
+            "costume_confidence": costume_confidence,
+            "costume_description": costume_description,
+            "color": entry.get("color", "#cccccc"),
+            "pattern": entry.get("pattern", "Unknown"),
+            "sex": entry.get("sex", "Unknown"),
+            "gender_confidence": entry.get("gender_confidence", 0),
+            "hand": entry.get("hand", "Unknown"),
+            "is_valid": is_valid_image,
+            # ...other existing properties...
+        })
+    
+    return images
 
 @app.errorhandler(404)
 def page_not_found(e):

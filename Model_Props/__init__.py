@@ -6,11 +6,14 @@ Contains modules for image analysis, color detection, and wearable classificatio
 from .image_analyzer import ClothingImageAnalyzer
 from .color_analyzer import ColorAnalyzer, analyze_colors
 from .gender_analyzer import GenderAnalyzer, analyze_gender
+from .costume_analyzer import CostumeAnalyzer, analyze_costume
 
 __all__ = [
     'ClothingImageAnalyzer',
     'ColorAnalyzer',
     'analyze_colors',
     'GenderAnalyzer',
-    'analyze_gender'
+    'analyze_gender',
+    'CostumeAnalyzer',
+    'analyze_costume'
 ]
