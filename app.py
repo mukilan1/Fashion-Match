@@ -16,6 +16,7 @@ import io
 # Fix import paths to use Model_Props directory
 from Model_Props.image_analyzer import ClothingImageAnalyzer
 from Model_Props.color_analyzer import analyze_colors
+from Model_Props.gender_analyzer import analyze_gender
 
 # Add a progress indicator function
 def show_progress(operation, percent=0, status="", final=False):
@@ -343,11 +344,11 @@ def upload():
             # Create temporary file path
             temp_path = os.path.join("/tmp", filename)
             file.save(temp_path)
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 10, "File saved")
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 5, "File saved")
             
             # Remove background from image
             try:
-                show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 20, "Removing background")
+                show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 10, "Removing background")
                 processed_image = remove_background(temp_path)
                 
                 # Save processed image (with transparent background)
@@ -356,7 +357,7 @@ def upload():
                 
                 # Save with transparent background
                 processed_image.save(file_path, format="PNG")
-                show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 40, "Background removed")
+                show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 20, "Background removed")
                 
                 print(f"Background removed and saved: {filename}")
             except Exception as e:
@@ -370,62 +371,103 @@ def upload():
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             
-            # MODIFIED: Use ONLY the image analyzer for classification
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 70, "Analyzing image")
-            analysis_results = image_analyzer.analyze_image(file_path)
+            # COMBINED ANALYSIS PIPELINE: Perform all analysis at once for efficiency
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 30, "Analyzing clothing item")
             
-            # Extract the classification directly from the analyzer results
+            # 1. Image classification analysis
+            analysis_results = image_analyzer.analyze_image(file_path)
             label = analysis_results.get("classification", "unknown")
             confidence = analysis_results.get("confidence", 0)
-            wearable_position = analysis_results.get("wearable_position", "unknown")  # Get wearable position
+            wearable_position = analysis_results.get("wearable_position", "unknown")
             
-            # Ensure we always have a valid wearable position
+            # Default wearable position as fallback
             if wearable_position == "unknown":
-                # Try to determine from label as fallback
                 if "shirt" in label.lower() or "top" in label.lower() or "jacket" in label.lower():
                     wearable_position = "top wearable"
                 elif "pants" in label.lower() or "jeans" in label.lower() or "skirt" in label.lower():
                     wearable_position = "bottom wearable"
                 else:
-                    # If we really can't determine, assign as top wearable by default
                     wearable_position = "top wearable"
             
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 90, f"Analysis completed - {wearable_position}")
-            
-            # Add color analysis
+            # 2. Color analysis
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 45, "Analyzing colors")
             try:
                 color_info = analyze_colors(file_path)
                 primary_color = color_info['primary_color']
                 colors_text = color_info['colors_text']
-                
-                print(f"Detected colors: {colors_text}")
             except Exception as e:
                 print(f"Color analysis failed: {str(e)}")
                 primary_color = "unknown"
                 colors_text = "unknown"
             
-            # Store in labels with wearable position and color
+            # 3. Gender analysis (integrated into upload flow)
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 60, "Determining gender")
+            # Create metadata dict from what we know so far
+            metadata = {
+                "label": label,
+                "wearable": wearable_position,
+                "color": primary_color
+            }
+            try:
+                gender_info = analyze_gender(file_path, metadata)
+                gender = gender_info.get("gender", "unknown")
+                gender_confidence = gender_info.get("confidence", 0)
+                gender_probabilities = gender_info.get("probabilities", {})
+                print(f"Detected gender: {gender} (confidence: {gender_confidence:.2f})")
+            except Exception as e:
+                print(f"Gender analysis failed: {str(e)}")
+                gender = "unknown"
+                gender_confidence = 0
+                gender_probabilities = {"men": 0.33, "women": 0.33, "unisex": 0.34}
+            
+            # 4. Pattern detection (simplified here)
+            pattern = "unknown"
+            if "pattern" in label.lower():
+                if "solid" in label.lower():
+                    pattern = "solid"
+                elif "stripe" in label.lower():
+                    pattern = "striped"
+                elif "floral" in label.lower():
+                    pattern = "floral"
+            
+            # 5. Sleeve/hand type detection
+            hand = "unknown"
+            if "sleeve" in label.lower():
+                if "long" in label.lower():
+                    hand = "full hand"
+                elif "short" in label.lower():
+                    hand = "half hand"
+                elif "no" in label.lower() or "sleeveless" in label.lower():
+                    hand = "no hand"
+            
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 75, "All analysis completed")
+            
+            # Store all metadata together
             labels[filename] = {
                 "label": label,
-                "wearable": wearable_position,  # Use wearable_position for the wearable field
-                "costume": "unknown",
+                "wearable": wearable_position,
+                "costume": "unknown", 
                 "color": primary_color,
                 "color_detail": colors_text,
-                "pattern": "unknown",
-                "sex": "unknown",
-                "hand": "unknown"
+                "pattern": pattern,
+                "sex": gender,  # Gender is stored automatically
+                "gender_confidence": gender_confidence,  # Store the confidence value
+                "hand": hand
             }
             
+            # Return comprehensive analysis results to frontend
             results.append({
                 "filename": filename,
                 "label": label,
-                "wearable": wearable_position,  # Use wearable_position for the wearable field
+                "wearable": wearable_position,
                 "costume": "unknown",
                 "color": primary_color,
                 "color_detail": colors_text,
-                "pattern": "unknown",
-                "sex": "unknown",
-                "hand": "unknown",
+                "pattern": pattern,
+                "sex": gender,
+                "gender_confidence": gender_confidence,
+                "gender_probabilities": gender_probabilities,
+                "hand": hand,
                 "path": file_path,
                 "background_removed": True,
                 "analysis_confidence": confidence
@@ -843,6 +885,45 @@ def analyze_image_colors(filename):
         })
     except Exception as e:
         print(f"Error analyzing colors in {filename}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# Add a new route for gender analysis of existing images
+@app.route("/analyze_gender/<filename>", methods=["POST"])
+def analyze_image_gender(filename):
+    """
+    Internal API endpoint to re-analyze gender for an image.
+    This endpoint is not exposed in the UI but available for programmatic use.
+    """
+    # Authentication check could be added here for extra security
+    
+    # Secure the filename
+    secure_name = secure_filename(filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+    
+    try:
+        # Get existing metadata
+        labels = load_labels()
+        metadata = labels.get(secure_name, {})
+        
+        # Run gender analysis
+        gender_info = analyze_gender(file_path, metadata)
+        
+        # Update labels with the gender information
+        if secure_name in labels:
+            labels[secure_name]['sex'] = gender_info['gender']
+            labels[secure_name]['gender_confidence'] = gender_info['confidence']
+            save_labels(labels)
+        
+        return jsonify({
+            "filename": filename,
+            "gender_analysis": gender_info,
+            "updated": True
+        })
+    except Exception as e:
+        print(f"Error analyzing gender in {filename}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.errorhandler(404)
