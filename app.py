@@ -1,3 +1,4 @@
+# Update these imports to use the correct paths
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
 import sys
@@ -12,7 +13,9 @@ import ollama
 import shutil
 from rembg import remove  
 import io
-from image_analyzer import ClothingImageAnalyzer  # This becomes our only image analysis tool
+# Fix import paths to use Model_Props directory
+from Model_Props.image_analyzer import ClothingImageAnalyzer
+from Model_Props.color_analyzer import analyze_colors
 
 # Add a progress indicator function
 def show_progress(operation, percent=0, status="", final=False):
@@ -389,12 +392,25 @@ def upload():
             
             show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 90, f"Analysis completed - {wearable_position}")
             
-            # Store in labels with wearable position
+            # Add color analysis
+            try:
+                color_info = analyze_colors(file_path)
+                primary_color = color_info['primary_color']
+                colors_text = color_info['colors_text']
+                
+                print(f"Detected colors: {colors_text}")
+            except Exception as e:
+                print(f"Color analysis failed: {str(e)}")
+                primary_color = "unknown"
+                colors_text = "unknown"
+            
+            # Store in labels with wearable position and color
             labels[filename] = {
                 "label": label,
                 "wearable": wearable_position,  # Use wearable_position for the wearable field
                 "costume": "unknown",
-                "color": "unknown",
+                "color": primary_color,
+                "color_detail": colors_text,
                 "pattern": "unknown",
                 "sex": "unknown",
                 "hand": "unknown"
@@ -405,7 +421,8 @@ def upload():
                 "label": label,
                 "wearable": wearable_position,  # Use wearable_position for the wearable field
                 "costume": "unknown",
-                "color": "unknown",
+                "color": primary_color,
+                "color_detail": colors_text,
                 "pattern": "unknown",
                 "sex": "unknown",
                 "hand": "unknown",
@@ -806,6 +823,27 @@ def get_all_images():
         })
     
     return images
+
+@app.route("/analyze_colors/<filename>")
+def analyze_image_colors(filename):
+    """Analyze an image to extract dominant colors."""
+    # Secure the filename
+    secure_name = secure_filename(filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+    
+    try:
+        # Run color analysis
+        color_info = analyze_colors(file_path)
+        return jsonify({
+            "filename": filename,
+            "color_analysis": color_info
+        })
+    except Exception as e:
+        print(f"Error analyzing colors in {filename}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.errorhandler(404)
 def page_not_found(e):

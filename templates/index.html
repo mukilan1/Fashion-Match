@@ -623,8 +623,17 @@
                             <li>
                                 <span class="property-name">Color:</span>
                                 <span class="property-value">
+                                    <!-- Show color sample using the primary color -->
                                     <span class="color-sample" style="background-color:{{ image.color }};"></span>
-                                    {{ image.color }}
+                                    {% if image.color_detail %}
+                                        <!-- Display detailed color information with a tooltip -->
+                                        <span title="{{ image.color_detail }}">{{ image.color }}</span>
+                                        {% if ',' in image.color_detail %}
+                                            <small>(multi-colored)</small>
+                                        {% endif %}
+                                    {% else %}
+                                        {{ image.color }}
+                                    {% endif %}
                                 </span>
                             </li>
                             <li>
