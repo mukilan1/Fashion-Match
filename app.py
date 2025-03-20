@@ -3,19 +3,16 @@ import os
 import sys
 import time
 from werkzeug.utils import secure_filename
-from model import classify_cloth  # Our clothing classifier
 import json
 from PIL import Image
 import numpy as np
 import re
 from sentence_transformers import SentenceTransformer, util
-from transformers import pipeline  # NEW import
-import requests  # NEW import for local API call
-import ollama  # ensure ollama is imported
-import shutil  # Add this import for file operations
-from rembg import remove  # Add this import for background removal
-import io  # Add this for handling image data
-from image_analyzer import ClothingImageAnalyzer  # Import our new image analyzer
+import ollama
+import shutil
+from rembg import remove  
+import io
+from image_analyzer import ClothingImageAnalyzer  # This becomes our only image analysis tool
 
 # Add a progress indicator function
 def show_progress(operation, percent=0, status="", final=False):
@@ -370,42 +367,51 @@ def upload():
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             
-            # Process the image with our ClothingImageAnalyzer
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 70, "Classifying image")
-            label = classify_cloth(file_path)
-            
-            # Use the image analyzer to get clothing details
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 80, "Analyzing details")
+            # MODIFIED: Use ONLY the image analyzer for classification
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 70, "Analyzing image")
             analysis_results = image_analyzer.analyze_image(file_path)
-            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 90, "Analysis completed")
             
-            # Parse classification into separate fields
-            classification = analysis_results.get("classification", "unknown")
-            parsed_details = parse_clothing_analysis(classification)
+            # Extract the classification directly from the analyzer results
+            label = analysis_results.get("classification", "unknown")
+            confidence = analysis_results.get("confidence", 0)
+            wearable_position = analysis_results.get("wearable_position", "unknown")  # Get wearable position
             
-            # Store in labels
+            # Ensure we always have a valid wearable position
+            if wearable_position == "unknown":
+                # Try to determine from label as fallback
+                if "shirt" in label.lower() or "top" in label.lower() or "jacket" in label.lower():
+                    wearable_position = "top wearable"
+                elif "pants" in label.lower() or "jeans" in label.lower() or "skirt" in label.lower():
+                    wearable_position = "bottom wearable"
+                else:
+                    # If we really can't determine, assign as top wearable by default
+                    wearable_position = "top wearable"
+            
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 90, f"Analysis completed - {wearable_position}")
+            
+            # Store in labels with wearable position
             labels[filename] = {
                 "label": label,
-                "wearable": parsed_details["wearable"],
-                "costume": parsed_details["costume"],
-                "color": parsed_details["color"],
-                "pattern": parsed_details["pattern"],
-                "sex": parsed_details["sex"],
-                "hand": parsed_details["hand"]
+                "wearable": wearable_position,  # Use wearable_position for the wearable field
+                "costume": "unknown",
+                "color": "unknown",
+                "pattern": "unknown",
+                "sex": "unknown",
+                "hand": "unknown"
             }
             
             results.append({
                 "filename": filename,
                 "label": label,
-                "wearable": parsed_details["wearable"],
-                "costume": parsed_details["costume"],
-                "color": parsed_details["color"],
-                "pattern": parsed_details["pattern"],
-                "sex": parsed_details["sex"],
-                "hand": parsed_details["hand"],
+                "wearable": wearable_position,  # Use wearable_position for the wearable field
+                "costume": "unknown",
+                "color": "unknown",
+                "pattern": "unknown",
+                "sex": "unknown",
+                "hand": "unknown",
                 "path": file_path,
                 "background_removed": True,
-                "analysis_confidence": analysis_results.get("confidence", 0)
+                "analysis_confidence": confidence
             })
             show_progress(f"Processing file {i+1}/{total_files}", (i + 1) / total_files * 100, "Complete", final=(i==total_files-1))
         except Exception as e:
@@ -578,15 +584,13 @@ def match_upload():
     if os.path.exists(temp_path):
         os.remove(temp_path)
     
-    # Process the image
+    # Process the image - CHANGED: use image_analyzer instead of classify_cloth
     show_progress("Match processing", 50, "Analyzing image")
-    new_label = classify_cloth(file_path)
-    
-    # Use the image analyzer to get clothing details
-    analysis_results = image_analyzer.analyze_image(file_path)
+    analysis_result = image_analyzer.analyze_image(file_path)
+    new_label = analysis_result.get("classification", "unknown")
     
     # Parse classification into separate fields
-    classification = analysis_results.get("classification", "unknown")
+    classification = analysis_result.get("classification", "unknown")
     parsed_details = parse_clothing_analysis(classification)
     new_wearable = parsed_details["wearable"]
     
@@ -807,9 +811,9 @@ def get_all_images():
 def page_not_found(e):
     return render_template("404.html"), 404
 
-# Modify the if __name__ == '__main__' block if needed
+# Modify the if __name__ == '__main__' block to use a different port
 if __name__ == '__main__':
     show_progress("Starting server", 100, "Server initialized", final=True)
-    print("Fashion application running with pose rigging feature at: http://127.0.0.1:5000/")
-    print("Access pose rigging visualization at: http://127.0.0.1:5000/pose_rigging")
-    app.run(debug=True, threaded=True)
+    print("Fashion application running with pose rigging feature at: http://127.0.0.1:8080/")
+    print("Access pose rigging visualization at: http://127.0.0.1:8080/pose_rigging")
+    app.run(debug=True, threaded=True, port=8080)  # Changed port from 5000 to 8080
