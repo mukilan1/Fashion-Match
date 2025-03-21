@@ -21,6 +21,16 @@ from Model_Props.costume_analyzer import analyze_costume
 from Model_Props.sleeve_analyzer import analyze_sleeve
 from Model_Props.pattern_analyzer import analyze_pattern
 
+# Create a global SentenceTransformer model for match-making
+# This prevents reloading on each request and improves reliability
+try:
+    print("Initializing SentenceTransformer model...")
+    SBERT_MODEL = SentenceTransformer('all-mpnet-base-v2')
+    print("SentenceTransformer model initialized successfully")
+except Exception as e:
+    print(f"Error initializing SentenceTransformer: {str(e)}")
+    SBERT_MODEL = None
+
 # Fix the show_progress function
 def show_progress(operation, percent=0, status="", final=False):
     """
@@ -78,23 +88,53 @@ def save_matches(matches):
         json.dump(matches, f)
 
 def generate_dynamic_reason(new_item, candidate, score):
+    """
+    Generate a reason why two clothing items match well.
+    Now with robust fallback when Ollama is unavailable.
+    """
     prompt = (
         f"Why do these match? New: {new_item['label']}, {new_item['costume']}, {new_item['pattern']}, "
         f"{new_item['color']}. Candidate: {candidate['label']}, {candidate['costume']}, {candidate['pattern']}, "
         f"{candidate['color']}. Score: {score:.2f}. Answer in less than 2 lines."
     )
-    response = ollama.chat(model="deepseek-r1:1.5b", messages=[{'role': 'user', 'content': prompt}])
-    result_text = response.get('message', {}).get('content', "").strip()
     
-    # Clean up the response: remove <think> tags and other unwanted content
-    cleaned_text = re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL).strip()
-    
-    # If the result is empty or too short after cleaning, use a default message
-    if not cleaned_text or len(cleaned_text) < 10:
-        cleaned_text = "These fabrics complement each other based on design and color."
-    
-    # Return only the first line
-    return cleaned_text.split("\n")[0]
+    try:
+        # Try to use Ollama for dynamic content generation
+        response = ollama.chat(model="deepseek-r1:1.5b", messages=[{'role': 'user', 'content': prompt}])
+        result_text = response.get('message', {}).get('content', "").strip()
+        
+        # Clean up the response: remove <think> tags and other unwanted content
+        cleaned_text = re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL).strip()
+        
+        # If the result is empty or too short after cleaning, use a default message
+        if not cleaned_text or len(cleaned_text) < 10:
+            raise ValueError("Generated text too short")
+            
+        # Return only the first line
+        return cleaned_text.split("\n")[0]
+        
+    except Exception as e:
+        print(f"Ollama match reason generation failed: {str(e)}")
+        
+        # Fallback: Generate a simple reason based on available attributes
+        
+        # Extract relevant attributes that might match
+        color_match = new_item['color'] == candidate['color'] and new_item['color'] != "unknown" 
+        pattern_match = new_item['pattern'] == candidate['pattern'] and new_item['pattern'] != "unknown"
+        style_match = new_item['costume'] == candidate['costume'] and new_item['costume'] != "unknown"
+        
+        # Check specific attributes that matched for a more detailed fallback
+        if color_match and pattern_match:
+            return f"Both items feature similar {new_item['color']} color and {new_item['pattern']} pattern (match score: {score:.2f})"
+        elif color_match:
+            return f"These items complement each other with matching {new_item['color']} tones (match score: {score:.2f})"
+        elif pattern_match:
+            return f"The matching {new_item['pattern']} patterns create a cohesive look (match score: {score:.2f})"
+        elif style_match:
+            return f"Both pieces work well for {new_item['costume']} style outfits (match score: {score:.2f})"
+        else:
+            # Generic fallback with score
+            return f"These items complement each other based on overall style compatibility (match score: {score:.2f})"
 
 # Add a new function to synchronize labels.json with actual files
 def synchronize_labels():
@@ -470,7 +510,7 @@ def upload():
             if "sleeve" in label.lower():
                 if "long" in label.lower():
                     hand = "full hand"
-                elif "short" in label.lower():
+                elif "short" in label.lower() or "half" in label.lower():
                     hand = "half hand"
                 elif "no" in label.lower() or "sleeveless" in label.lower():
                     hand = "no hand"
@@ -684,17 +724,17 @@ def match_upload():
     # Create temporary file path
     temp_path = os.path.join("/tmp", filename)
     file.save(temp_path)
-    show_progress("Match processing", 20, "File saved")
+    show_progress("Match processing", 15, "File saved")
     
     # Remove background from image
     try:
-        show_progress("Match processing", 30, "Removing background")
+        show_progress("Match processing", 20, "Removing background")
         processed_image = remove_background(temp_path)
         
         # Save processed image (with transparent background)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         processed_image.save(file_path, format="PNG")
-        show_progress("Match processing", 40, "Background removed")
+        show_progress("Match processing", 25, "Background removed")
     except Exception as e:
         print(f"Background removal failed for {filename}: {str(e)}")
         # If background removal fails, use original image
@@ -705,65 +745,331 @@ def match_upload():
     if os.path.exists(temp_path):
         os.remove(temp_path)
     
-    # Process the image - CHANGED: use image_analyzer instead of classify_cloth
-    show_progress("Match processing", 50, "Analyzing image")
-    analysis_result = image_analyzer.analyze_image(file_path)
-    new_label = analysis_result.get("classification", "unknown")
+    # PERFORM FULL IMAGE ANALYSIS PIPELINE - same as index page upload
+    show_progress("Match processing", 30, "Analyzing clothing item")
     
-    # Parse classification into separate fields
-    classification = analysis_result.get("classification", "unknown")
-    parsed_details = parse_clothing_analysis(classification)
-    new_wearable = parsed_details["wearable"]
+    # 1. Image classification analysis
+    analysis_results = image_analyzer.analyze_image(file_path)
+    label = analysis_results.get("classification", "unknown")
+    confidence = analysis_results.get("confidence", 0)
+    wearable_position = analysis_results.get("wearable_position", "unknown")
     
-    show_progress("Match processing", 60, "Processing completed")
+    # Default wearable position as fallback
+    if wearable_position == "unknown":
+        if "shirt" in label.lower() or "top" in label.lower() or "jacket" in label.lower():
+            wearable_position = "top wearable"
+        elif "pants" in label.lower() or "jeans" in label.lower() or "skirt" in label.lower():
+            wearable_position = "bottom wearable"
+        else:
+            wearable_position = "top wearable"
     
-    new_text = f"{new_label} {new_wearable} unknown unknown unknown unknown"
+    # Perform complete analysis similar to upload endpoint
+    # 2. Color analysis
+    show_progress("Match processing", 35, "Analyzing colors")
+    try:
+        color_info = analyze_colors(file_path)
+        primary_color = color_info['primary_color']
+        colors_text = color_info['colors_text']
+    except Exception as e:
+        print(f"Color analysis failed: {str(e)}")
+        primary_color = "unknown"
+        colors_text = "unknown"
+    
+    # 3. Gender analysis
+    show_progress("Match processing", 40, "Determining gender")
+    # Create metadata dict from what we know so far
+    metadata = {
+        "label": label,
+        "wearable": wearable_position,
+        "color": primary_color
+    }
+    try:
+        gender_info = analyze_gender(file_path, metadata)
+        gender = gender_info.get("gender", "unknown")
+        gender_confidence = gender_info.get("confidence", 0)
+        gender_probabilities = gender_info.get("probabilities", {})
+    except Exception as e:
+        print(f"Gender analysis failed: {str(e)}")
+        gender = "unknown"
+        gender_confidence = 0
+        gender_probabilities = {"men": 0.33, "women": 0.33, "unisex": 0.34}
+    
+    # 4. Costume analysis
+    show_progress("Match processing", 45, "Determining costume style")
+    # Update metadata with all we've learned so far
+    metadata.update({
+        "gender": gender,
+        "label": label,
+        "color": primary_color,
+        "pattern": "unknown"  # Will be updated if we detect a pattern
+    })
+    try:
+        costume_info = analyze_costume(file_path, metadata)
+        costume = costume_info.get("costume", "unknown")
+        costume_display_name = costume_info.get("costume_display_name", "Unknown")
+        costume_confidence = costume_info.get("confidence", 0)
+        costume_description = costume_info.get("description", "")
+    except Exception as e:
+        print(f"Costume analysis failed: {str(e)}")
+        costume = "unknown"
+        costume_display_name = "Unknown"
+        costume_confidence = 0
+        costume_description = ""
+    
+    # 5. Pattern detection
+    show_progress("Match processing", 50, "Detecting pattern type")
+    # Create current metadata for pattern analysis
+    pattern_metadata = {
+        "label": label,
+        "wearable": wearable_position,
+        "color": primary_color
+    }
+    try:
+        pattern_info = analyze_pattern(file_path, pattern_metadata)
+        pattern = pattern_info.get("pattern_display", "unknown")
+        pattern_confidence = pattern_info.get("confidence", 0)
+    except Exception as e:
+        print(f"Pattern analysis failed: {str(e)}")
+        pattern = "unknown"
+        pattern_confidence = 0
+    
+    # 6. Sleeve/hand type detection
+    show_progress("Match processing", 55, "Detecting sleeve length")
+    # Update metadata with what we know so far
+    current_metadata = {
+        "label": label,
+        "wearable": wearable_position,
+        "color": primary_color
+    }
+    try:
+        sleeve_info = analyze_sleeve(file_path, current_metadata)
+        hand = sleeve_info.get("sleeve_display", "unknown")
+        # Only use the result if it's not bottom wear
+        if sleeve_info.get("is_bottom_wear", False):
+            hand = "N/A (Bottom Wear)"
+    except Exception as e:
+        print(f"Sleeve analysis failed: {str(e)}")
+        hand = "unknown"
+    
+    # Store metadata for the newly uploaded item
+    labels = load_labels()
+    labels[filename] = {
+        "label": label,
+        "wearable": wearable_position,
+        "costume": costume,
+        "costume_display": costume_display_name,
+        "costume_confidence": costume_confidence,
+        "costume_description": costume_description,
+        "color": primary_color,
+        "color_detail": colors_text,
+        "pattern": pattern,
+        "pattern_confidence": pattern_confidence,
+        "sex": gender,
+        "gender_confidence": gender_confidence,
+        "hand": hand
+    }
+    save_labels(labels)
+    
+    show_progress("Match processing", 60, "Full analysis completed")
+    
+    # ENHANCED MATCHING PROCESS WITH TOP/BOTTOM COMPATIBILITY
+    new_text = f"{label} {wearable_position} {costume} {pattern} {primary_color} {gender}"
     stored = load_labels()
+    
+    # Determine what type of item we need to match with
+    target_wearable_type = "bottom wearable" if wearable_position == "top wearable" else "top wearable"
+    print(f"Looking for {target_wearable_type} to match with {wearable_position}")
+    
+    # Define color compatibility pairs for fashion matching
+    color_pairs = {
+        "black": ["white", "gray", "red", "blue", "green", "yellow", "purple", "pink"],
+        "white": ["black", "navy", "red", "blue", "green", "purple", "pink"],
+        "blue": ["white", "gray", "navy", "khaki", "brown", "pink", "black"],
+        "navy": ["white", "khaki", "gray", "brown", "red"],
+        "red": ["black", "white", "navy", "gray", "khaki"],
+        "gray": ["black", "white", "navy", "blue", "red", "purple"],
+        "green": ["black", "khaki", "white", "brown"],
+        "brown": ["khaki", "blue", "white", "green"],
+        "khaki": ["navy", "brown", "green", "red"],
+        "pink": ["navy", "white", "gray", "black"],
+        "purple": ["white", "black", "gray"]
+    }
+    
     candidates = []
     for fname, data in stored.items():
         if fname == filename:  # Skip matching with self
             continue
+            
+        # Only consider items of the complementary wearable type
+        cand_wearable = data.get("wearable", "").lower()
+        if cand_wearable != target_wearable_type:
+            continue  # Skip items that aren't the right type (top or bottom)
+            
         cand_text = f"{data.get('label','')} {data.get('wearable','')} {data.get('costume','')} {data.get('pattern','')} {data.get('color','')} {data.get('sex','')}"
         candidates.append((fname, cand_text, data))
+    
     if not candidates:
-        show_progress("Match processing", 100, "No candidates found", final=True)
-        return jsonify({"error": "No candidate found for matching."}), 404
+        show_progress("Match processing", 100, f"No {target_wearable_type} items found for matching", final=True)
+        return jsonify({"error": f"No {target_wearable_type} items found to match with your {wearable_position}. Upload some complementary pieces."}), 404
     
-    # Initialize SBERT model for semantic matching.
-    show_progress("Match processing", 70, "Finding best match")
-    sbert_model = SentenceTransformer('all-mpnet-base-v2')
-    new_embedding = sbert_model.encode(new_text, convert_to_tensor=True)
-    best_candidate, best_score = None, -1
-    for fname, cand_text, data in candidates:
-        cand_embedding = sbert_model.encode(cand_text, convert_to_tensor=True)
-        score = util.cos_sim(new_embedding, cand_embedding).item()
-        if score > best_score:
-            best_score = score
-            best_candidate = {"filename": fname, "data": data, "score": best_score}
-    show_progress("Match processing", 80, "Match found")
+    # Use the global SentenceTransformer model for matching
+    show_progress("Match processing", 70, "Finding best fashion match")
     
+    try:
+        # Check if global model is available, if not initialize it
+        if SBERT_MODEL is None:
+            print("Warning: Using one-time SentenceTransformer model - this may cause performance issues")
+            temp_model = SentenceTransformer('all-mpnet-base-v2')
+            new_embedding = temp_model.encode(new_text, convert_to_tensor=True)
+        else:
+            new_embedding = SBERT_MODEL.encode(new_text, convert_to_tensor=True)
+            
+        best_candidate, best_score = None, -1
+        
+        # Get properties of the uploaded item
+        item_color = primary_color.lower()
+        item_style = costume.lower()
+        item_gender = gender.lower()
+        
+        for fname, cand_text, data in candidates:
+            # Calculate semantic similarity using SBERT
+            if SBERT_MODEL is None:
+                cand_embedding = temp_model.encode(cand_text, convert_to_tensor=True)
+            else:
+                cand_embedding = SBERT_MODEL.encode(cand_text, convert_to_tensor=True)
+                
+            # Get base similarity score
+            base_score = util.cos_sim(new_embedding, cand_embedding).item()
+            
+            # Apply fashion-specific matching bonuses
+            # Extract candidate attributes
+            cand_color = data.get("color", "").lower()
+            cand_style = data.get("costume", "").lower()
+            cand_gender = data.get("sex", "").lower()
+            cand_pattern = data.get("pattern", "").lower()
+            
+            # Color compatibility bonus
+            color_bonus = 0
+            if item_color in color_pairs and cand_color in color_pairs.get(item_color, []):
+                color_bonus = 0.15
+                
+            # Style consistency bonus
+            style_bonus = 0
+            if item_style == cand_style and item_style != "unknown":
+                style_bonus = 0.1
+            
+            # Gender consistency bonus
+            gender_bonus = 0
+            if item_gender == cand_gender or item_gender == "unisex" or cand_gender == "unisex":
+                gender_bonus = 0.05
+                
+            # Pattern compatibility - solid with pattern often works well
+            pattern_bonus = 0
+            if (pattern == "solid" and cand_pattern != "solid" and cand_pattern != "unknown") or \
+               (cand_pattern == "solid" and pattern != "solid" and pattern != "unknown"):
+                pattern_bonus = 0.05
+            
+            # Calculate final score with bonuses
+            total_score = base_score + color_bonus + style_bonus + gender_bonus + pattern_bonus
+            
+            # Track details for explanation
+            match_details = {
+                "base_score": base_score,
+                "color_bonus": color_bonus,
+                "style_bonus": style_bonus,
+                "gender_bonus": gender_bonus,
+                "pattern_bonus": pattern_bonus,
+                "total_score": total_score,
+                "explanation": []
+            }
+            
+            # Add explanations for bonuses
+            if color_bonus > 0:
+                match_details["explanation"].append(f"{item_color} works well with {cand_color}")
+            if style_bonus > 0:
+                match_details["explanation"].append(f"both are {item_style} style")
+            if gender_bonus > 0:
+                match_details["explanation"].append(f"gender compatible")
+            if pattern_bonus > 0:
+                match_details["explanation"].append(f"{pattern} pairs nicely with {cand_pattern}")
+            
+            # Track best match with all details
+            if total_score > best_score:
+                best_score = total_score
+                best_candidate = {
+                    "filename": fname,
+                    "data": data,
+                    "score": best_score,
+                    "match_details": match_details
+                }
+                
+        show_progress("Match processing", 80, "Perfect match found")
+        
+    except Exception as e:
+        show_progress("Match processing", 100, f"Error in matching: {str(e)}", final=True)
+        return jsonify({"error": f"Match processing failed: {str(e)}"}), 500
+    
+    # Create result with complete metadata for the new item
     result = {
         "new_item": {
             "filename": filename,
-            "label": new_label,
-            "wearable": new_wearable,
-            "color": "unknown",
-            "costume": "unknown",
-            "pattern": "unknown",
-            "sex": "unknown",
-            "hand": "unknown"
+            "label": label,
+            "wearable": wearable_position,
+            "color": primary_color,
+            "costume": costume,
+            "pattern": pattern,
+            "sex": gender,
+            "hand": hand
         },
         "best_match": best_candidate
     }
     
-    # Instead of a fixed reason, generate a dynamic reason using our NLP model.
-    show_progress("Match processing", 90, "Generating match explanation")
-    reason_text = generate_dynamic_reason(result["new_item"], best_candidate["data"], best_score)
-    result["reason"] = reason_text
+    # Generate a dynamic reason with enhanced style explanation
+    show_progress("Match processing", 90, "Generating fashion advice")
+    try:
+        # Try to use the enhanced reason generator first
+        if "match_details" in best_candidate and "explanation" in best_candidate["match_details"]:
+            details = best_candidate["match_details"]
+            explanations = details["explanation"]
+            
+            # Create a fashion-focused prompt with detailed style information
+            fashion_prompt = (
+                f"As a fashion stylist, explain why a {primary_color} {pattern} {label} "
+                f"({wearable_position}) in {costume} style pairs well with a {best_candidate['data'].get('color', '')} "
+                f"{best_candidate['data'].get('pattern', '')} {best_candidate['data'].get('label', '')} "
+                f"({best_candidate['data'].get('wearable', '')}) in {best_candidate['data'].get('costume', '')} style. "
+                f"Consider these factors: {', '.join(explanations)}. Respond with one concise, specific styling advice sentence."
+            )
+            
+            try:
+                # Try Ollama first for best quality
+                response = ollama.chat(model="deepseek-r1:1.5b", messages=[{'role': 'user', 'content': fashion_prompt}])
+                reason_text = response.get('message', {}).get('content', "").strip()
+                reason_text = re.sub(r"<think>.*?</think>", "", reason_text, flags=re.DOTALL).strip()
+                if len(reason_text) < 10:
+                    raise ValueError("Generated text too short")
+            except Exception:
+                # Create a reason from the explanation components
+                if explanations:
+                    reason_text = f"This {label} and {best_candidate['data']['label']} create a stylish outfit because {' and '.join(explanations)}."
+                else:
+                    # Use the basic generator as fallback
+                    reason_text = generate_dynamic_reason(result["new_item"], best_candidate["data"], best_score)
+        else:
+            # Fallback to simple reason generator
+            reason_text = generate_dynamic_reason(result["new_item"], best_candidate["data"], best_score)
+            
+        result["reason"] = reason_text
+    except Exception as e:
+        # Final fallback for any errors
+        print(f"Error generating match reason: {str(e)}")
+        result["reason"] = f"These items complement each other with a fashion match score of {best_score:.2f}"
+    
+    # Save match record
     matches = load_matches()
     matches.append(result)
     save_matches(matches)
-    show_progress("Match processing", 100, "Match completed", final=True)
+    show_progress("Match processing", 100, "Outfit match completed", final=True)
     
     return jsonify({"matched": result}), 200
 
@@ -774,39 +1080,186 @@ def get_matches():
 
 @app.route("/auto_match", methods=["GET"])
 def auto_match():
+    """
+    Auto-match tops with bottoms, ensuring appropriate matching by:
+    1. Only matching tops with bottoms (strictly enforced)
+    2. Considering color compatibility, style, pattern and gender
+    3. Applying minimum compatibility thresholds
+    """
     labels = load_labels()
     tops = []
     bottoms = []
+    
+    # Filter and categorize clothing items
     for filename, data in labels.items():
+        wearable_type = data.get("wearable", "").lower()
+        
+        # Create richer text representation that includes all meaningful attributes
         text = f"{data.get('label','')} {data.get('costume','')} {data.get('pattern','')} {data.get('color','')} {data.get('sex','')}"
-        if data.get("wearable") == "top wearable":
+        
+        # Strict categorization to ensure proper matching
+        if wearable_type == "top wearable":
             tops.append({"filename": filename, "text": text, "data": data})
-        elif data.get("wearable") == "bottom wearable":
+        elif wearable_type == "bottom wearable":
             bottoms.append({"filename": filename, "text": text, "data": data})
+        # Note: we exclude other types like "dress" as they're not suitable for top-bottom matching
+    
+    # Check if we have sufficient items for matching
+    if not tops or not bottoms:
+        return jsonify({
+            "auto_matches": [], 
+            "error": "Need at least one top and one bottom item for matching"
+        }), 200
+        
     auto_matches = []
     
-    # Initialize SBERT model for semantic matching
-    sbert_model = SentenceTransformer('all-mpnet-base-v2')
+    # Use global model if available, otherwise initialize a temporary one
+    if SBERT_MODEL is not None:
+        embedding_model = SBERT_MODEL
+    else:
+        embedding_model = SentenceTransformer('all-mpnet-base-v2')
+    
+    # Define color compatibility pairs - colors that go well together
+    color_pairs = {
+        "black": ["white", "gray", "red", "blue", "green", "yellow", "purple", "pink"],
+        "white": ["black", "navy", "red", "blue", "green", "purple", "pink"],
+        "blue": ["white", "gray", "navy", "khaki", "brown", "pink", "black"],
+        "navy": ["white", "khaki", "gray", "brown", "red"],
+        "red": ["black", "white", "navy", "gray", "khaki"],
+        "gray": ["black", "white", "navy", "blue", "red", "purple"],
+        "green": ["black", "khaki", "white", "brown"],
+        "brown": ["khaki", "blue", "white", "green"],
+        "khaki": ["navy", "brown", "green", "red"],
+        "pink": ["navy", "white", "gray", "black"],
+        "purple": ["white", "black", "gray"]
+    }
+    
+    # Minimum threshold for matching - score must be at least this value
+    MIN_MATCH_THRESHOLD = 0.4
     
     for top in tops:
-        top_emb = sbert_model.encode(top["text"], convert_to_tensor=True)
-        best_bottom, best_score = None, -1
+        # Pre-encode top embedding for efficiency
+        top_emb = embedding_model.encode(top["text"], convert_to_tensor=True)
+        best_match = None
+        best_score = -1
+        
+        top_color = top["data"].get("color", "").lower()
+        top_style = top["data"].get("costume", "").lower()
+        top_gender = top["data"].get("sex", "").lower()
+        
         for bottom in bottoms:
-            bottom_emb = sbert_model.encode(bottom["text"], convert_to_tensor=True)
-            score = util.cos_sim(top_emb, bottom_emb).item()
-            if score > best_score:
-                best_score = score
-                best_bottom = bottom
-        if best_bottom:
-            # Generate a dynamic reason here as well.
-            reason_text = generate_dynamic_reason(top["data"], best_bottom["data"], best_score)
+            # Apply business logic for compatibility
+            bottom_color = bottom["data"].get("color", "").lower()
+            bottom_style = bottom["data"].get("costume", "").lower()
+            bottom_gender = bottom["data"].get("sex", "").lower()
+            
+            # Basic color compatibility check - apply a bonus for compatible colors
+            color_bonus = 0
+            if top_color in color_pairs and bottom_color in color_pairs.get(top_color, []):
+                color_bonus = 0.15
+                
+            # Style consistency check - formal with formal, casual with casual
+            style_bonus = 0
+            if top_style == bottom_style and top_style != "unknown":
+                style_bonus = 0.1
+            
+            # Gender consistency check
+            gender_bonus = 0
+            if top_gender == bottom_gender or top_gender == "unisex" or bottom_gender == "unisex":
+                gender_bonus = 0.05
+            
+            # Encode bottom and calculate semantic similarity
+            bottom_emb = embedding_model.encode(bottom["text"], convert_to_tensor=True)
+            base_score = util.cos_sim(top_emb, bottom_emb).item()
+            
+            # Add bonuses to semantic score for final match score
+            total_score = base_score + color_bonus + style_bonus + gender_bonus
+            
+            # Track the best match
+            if total_score > best_score:
+                best_score = total_score
+                best_match = {
+                    "bottom": bottom,
+                    "score": total_score,
+                    "semantic_score": base_score,
+                    "color_bonus": color_bonus,
+                    "style_bonus": style_bonus,
+                    "gender_bonus": gender_bonus
+                }
+        
+        # Only include matches that meet the minimum threshold
+        if best_match and best_match["score"] >= MIN_MATCH_THRESHOLD:
+            # Generate a specific reason for why these items match
+            try:
+                match_details = f"(Base:{best_match['semantic_score']:.2f}, Color:{best_match['color_bonus']:.2f}, Style:{best_match['style_bonus']:.2f}, Gender:{best_match['gender_bonus']:.2f})"
+                reason_text = generate_detailed_match_reason(top["data"], best_match["bottom"]["data"], best_match["score"], match_details)
+            except Exception as e:
+                print(f"Error generating match reason: {str(e)}")
+                reason_text = f"These items have a match score of {best_match['score']:.2f} {match_details}"
+                
             auto_matches.append({
                 "top": top,
-                "bottom": best_bottom,
-                "score": best_score,
+                "bottom": best_match["bottom"],
+                "score": best_match["score"],
                 "reason": reason_text
             })
+    
+    # Sort matches by score, highest first
+    auto_matches.sort(key=lambda x: x["score"], reverse=True)
+    
     return jsonify({"auto_matches": auto_matches}), 200
+
+def generate_detailed_match_reason(top_item, bottom_item, score, details):
+    """
+    Generate a detailed reason for why two items match well, with fallback if Ollama is unavailable.
+    This function provides more specific matching reasons than the generic function.
+    """
+    # First try to use dynamic reason generation via Ollama
+    try:
+        prompt = (
+            f"Why do these clothes match well? Top: {top_item['label']} ({top_item['costume']}, {top_item['pattern']}, "
+            f"{top_item['color']}). Bottom: {bottom_item['label']} ({bottom_item['costume']}, {bottom_item['pattern']}, "
+            f"{bottom_item['color']}). Match score: {score:.2f}. Explain in one sentence what makes them a good outfit combination."
+        )
+        
+        response = ollama.chat(model="deepseek-r1:1.5b", messages=[{'role': 'user', 'content': prompt}])
+        result_text = response.get('message', {}).get('content', "").strip()
+        
+        # Clean up the response
+        cleaned_text = re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL).strip()
+        
+        if not cleaned_text or len(cleaned_text) < 10:
+            raise ValueError("Generated text too short")
+            
+        return cleaned_text.split("\n")[0]
+        
+    except Exception as e:
+        print(f"Ollama match reason generation failed: {str(e)}")
+        
+        # More detailed fallback logic based on specific attributes
+        reasons = []
+        
+        # Check for color compatibility
+        if top_item['color'] == bottom_item['color'] and top_item['color'] != "unknown":
+            reasons.append(f"matching {top_item['color']} color")
+        elif top_item['color'] != "unknown" and bottom_item['color'] != "unknown":
+            reasons.append(f"{top_item['color']} top complements {bottom_item['color']} bottom")
+        
+        # Check for style compatibility
+        if top_item['costume'] == bottom_item['costume'] and top_item['costume'] != "unknown":
+            reasons.append(f"consistent {top_item['costume']} style")
+        
+        # Check for pattern compatibility
+        if top_item['pattern'] == "solid" and bottom_item['pattern'] != "solid":
+            reasons.append(f"solid top balances {bottom_item['pattern']} bottom")
+        elif bottom_item['pattern'] == "solid" and top_item['pattern'] != "solid":
+            reasons.append(f"{top_item['pattern']} top balances solid bottom")
+        
+        # If we found specific reasons, use them
+        if reasons:
+            return f"These items pair well with {' and '.join(reasons)} (score: {score:.2f})"
+        else:
+            return f"This {top_item['label']} and {bottom_item['label']} create a coordinated outfit (score: {score:.2f})"
 
 @app.route("/delete_match", methods=["POST"])
 def delete_match():

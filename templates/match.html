@@ -692,10 +692,15 @@
         imgElement.src = `/uploads/${filename}?retry=${timestamp}&r=${Math.random()}`;
       }
       
-      // MAIN FORM HANDLER - Keep only this version of the form submission handler
+      // MAIN FORM HANDLER - This is now the only handler for the form
       document.getElementById("matchForm").addEventListener("submit", async function(e) {
           e.preventDefault();
           const formData = new FormData(this);
+          
+          // Reset error states
+          hideProgress();
+          document.getElementById('globalProgressBar').classList.remove('bg-danger');
+          document.getElementById('globalProgressBar').classList.add('bg-primary');
           
           // Show initial progress
           showProgress(10, "Starting to analyze your match...");
@@ -716,10 +721,18 @@
           try {
               showProgress(20, "Removing background from image...");
               
+              // Add a timeout to ensure our request doesn't time out
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
+              
               const response = await fetch("/match_upload", {
                   method: "POST",
-                  body: formData
+                  body: formData,
+                  signal: controller.signal
               });
+              
+              // Clear timeout since request completed
+              clearTimeout(timeoutId);
               
               showProgress(70, "Finding perfect match...");
               
@@ -844,27 +857,33 @@
                   validateAllDisplayedImages();
               }, 1500);
               
-          }, 800); // Minimum display time for loading animation
-      } catch (error) {
-          // Clear the progress interval
-          clearInterval(progressInterval);
-          
-          // Show error in progress
-          showProgress(100, `Error: ${error.message}`);
-          document.getElementById('globalProgressBar').classList.remove('bg-primary');
-          document.getElementById('globalProgressBar').classList.add('bg-danger');
-          
-          // Hide loading after a minimum time
-          const loadingAnimation = document.getElementById("loadingAnimation");
-          if (loadingAnimation) loadingAnimation.classList.remove("showing");
-          matchResultDiv.innerHTML = `<div class="alert alert-danger">An error occurred: ${error.message}</div>`;
-          
-          // Fade out progress after error
-          setTimeout(() => {
-              hideProgress();
-          }, 3000);
-      }
-  });
+              // Hide progress after a delay
+              setTimeout(() => {
+                  hideProgress();
+              }, 3000);
+              
+          } catch (error) {
+              // Clear the progress interval
+              clearInterval(progressInterval);
+              
+              // Show error in progress
+              showProgress(100, `Error: ${error.message}`);
+              document.getElementById('globalProgressBar').classList.remove('bg-primary');
+              document.getElementById('globalProgressBar').classList.add('bg-danger');
+              
+              // Hide loading after a minimum time
+              const loadingAnimation = document.getElementById("loadingAnimation");
+              if (loadingAnimation) loadingAnimation.classList.remove("showing");
+              matchResultDiv.innerHTML = `<div class="alert alert-danger">An error occurred: ${error.message}</div>`;
+              
+              console.error("Match error:", error);
+              
+              // Fade out progress after error
+              setTimeout(() => {
+                  hideProgress();
+              }, 3000);
+          }
+      });
       
       // Function to validate all currently displayed images
       function validateAllDisplayedImages() {
