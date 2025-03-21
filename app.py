@@ -19,8 +19,9 @@ from Model_Props.color_analyzer import analyze_colors
 from Model_Props.gender_analyzer import analyze_gender
 from Model_Props.costume_analyzer import analyze_costume
 from Model_Props.sleeve_analyzer import analyze_sleeve
+from Model_Props.pattern_analyzer import analyze_pattern
 
-# Add a progress indicator function
+# Fix the show_progress function
 def show_progress(operation, percent=0, status="", final=False):
     """
     Display a progress indicator in the console.
@@ -445,15 +446,24 @@ def upload():
                 costume_confidence = 0
                 costume_description = ""
             
-            # 5. Pattern detection (simplified here)
-            pattern = "unknown"
-            if "pattern" in label.lower():
-                if "solid" in label.lower():
-                    pattern = "solid"
-                elif "stripe" in label.lower():
-                    pattern = "striped"
-                elif "floral" in label.lower():
-                    pattern = "floral"
+            # 5. Pattern detection - IMPROVED with dedicated pattern_analyzer
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 65, "Detecting pattern type")
+            # Create current metadata for pattern analysis
+            pattern_metadata = {
+                "label": label,
+                "wearable": wearable_position,
+                "color": primary_color
+            }
+            
+            try:
+                pattern_info = analyze_pattern(file_path, pattern_metadata)
+                pattern = pattern_info.get("pattern_display", "unknown")
+                pattern_confidence = pattern_info.get("confidence", 0)
+                print(f"Detected pattern: {pattern} (confidence: {pattern_confidence:.2f})")
+            except Exception as e:
+                print(f"Pattern analysis failed: {str(e)}")
+                pattern = "unknown"
+                pattern_confidence = 0
             
             # 6. Sleeve/hand type detection
             hand = "unknown"
@@ -497,6 +507,7 @@ def upload():
                 "color": primary_color,
                 "color_detail": colors_text,
                 "pattern": pattern,
+                "pattern_confidence": pattern_confidence,
                 "sex": gender,  # Gender is stored automatically
                 "gender_confidence": gender_confidence,  # Store the confidence value
                 "hand": hand
@@ -514,6 +525,7 @@ def upload():
                 "color": primary_color,
                 "color_detail": colors_text,
                 "pattern": pattern,
+                "pattern_confidence": pattern_confidence,
                 "sex": gender,
                 "gender_confidence": gender_confidence,
                 "gender_probabilities": gender_probabilities,
@@ -1140,6 +1152,43 @@ def analyze_image_sleeve(filename):
             })
     except Exception as e:
         print(f"Error analyzing sleeve in {filename}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# Add a new route for pattern analysis of existing images
+@app.route("/analyze_pattern/<filename>", methods=["POST"])
+def analyze_image_pattern(filename):
+    """
+    Analyze pattern type for an image and update metadata.
+    This will determine if the clothing has solid, striped, checkered, etc. pattern.
+    """
+    # Secure the filename
+    secure_name = secure_filename(filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+    
+    try:
+        # Get existing metadata
+        labels = load_labels()
+        metadata = labels.get(secure_name, {})
+        
+        # Run pattern analysis
+        pattern_info = analyze_pattern(file_path, metadata)
+        
+        # Update labels with the pattern information
+        if secure_name in labels:
+            labels[secure_name]['pattern'] = pattern_info['pattern_display']
+            labels[secure_name]['pattern_confidence'] = pattern_info['confidence']
+            save_labels(labels)
+            
+        return jsonify({
+            "filename": filename,
+            "pattern_analysis": pattern_info,
+            "updated": True
+        })
+    except Exception as e:
+        print(f"Error analyzing pattern in {filename}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.errorhandler(404)

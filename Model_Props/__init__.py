@@ -8,6 +8,7 @@ from .color_analyzer import ColorAnalyzer, analyze_colors
 from .gender_analyzer import GenderAnalyzer, analyze_gender
 from .costume_analyzer import CostumeAnalyzer, analyze_costume
 from .sleeve_analyzer import SleeveAnalyzer, analyze_sleeve
+from .pattern_analyzer import PatternAnalyzer, analyze_pattern
 
 __all__ = [
     'ClothingImageAnalyzer',
@@ -18,5 +19,7 @@ __all__ = [
     'CostumeAnalyzer',
     'analyze_costume',
     'SleeveAnalyzer',
-    'analyze_sleeve'
+    'analyze_sleeve',
+    'PatternAnalyzer',
+    'analyze_pattern'
 ]
