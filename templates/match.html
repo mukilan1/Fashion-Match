@@ -470,6 +470,10 @@
                             <span class="property-name">Pattern:</span> 
                             <span class="property-value">{{ image.pattern }}</span>
                         </li>
+                        <li>
+                            <span class="property-name">Sleeve:</span>
+                            <span class="property-value">{{ image.hand }}</span>
+                        </li>
                     </ul>
                 </div>
               </div>
@@ -777,6 +781,7 @@
                     </span>
                   </li>
                   <li><span class="property-name">Pattern:</span> <span class="property-value">${newItem.pattern}</span></li>
+                  <li><span class="property-name">Sleeve:</span> <span class="property-value">${newItem.hand}</span></li>
                 </ul>
               `;
               
@@ -811,6 +816,7 @@
                       </span>
                     </li>
                     <li><span class="property-name">Pattern:</span> <span class="property-value">${bestMatch.data.pattern}</span></li>
+                    <li><span class="property-name">Sleeve:</span> <span class="property-value">${bestMatch.data.hand}</span></li>
                     <li><span class="property-name">Similarity Score:</span> <span class="property-value">${bestMatch.score.toFixed(2)}</span></li>
                   </ul>
                 `;

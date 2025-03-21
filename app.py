@@ -18,6 +18,7 @@ from Model_Props.image_analyzer import ClothingImageAnalyzer
 from Model_Props.color_analyzer import analyze_colors
 from Model_Props.gender_analyzer import analyze_gender
 from Model_Props.costume_analyzer import analyze_costume
+from Model_Props.sleeve_analyzer import analyze_sleeve
 
 # Add a progress indicator function
 def show_progress(operation, percent=0, status="", final=False):
@@ -463,6 +464,25 @@ def upload():
                     hand = "half hand"
                 elif "no" in label.lower() or "sleeveless" in label.lower():
                     hand = "no hand"
+            
+            # NEW: Add sleeve analysis
+            show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 70, "Detecting sleeve length")
+            # Update metadata with what we know so far
+            current_metadata = {
+                "label": label,
+                "wearable": wearable_position,
+                "color": primary_color
+            }
+            try:
+                sleeve_info = analyze_sleeve(file_path, current_metadata)
+                hand = sleeve_info.get("sleeve_display", "unknown")
+                # Only use the result if it's not bottom wear
+                if sleeve_info.get("is_bottom_wear", False):
+                    hand = "N/A (Bottom Wear)"
+                print(f"Detected sleeve length: {hand}")
+            except Exception as e:
+                print(f"Sleeve analysis failed: {str(e)}")
+                hand = "unknown"
             
             show_progress(f"Processing file {i+1}/{total_files}", (i / total_files) * 30 + 75, "All analysis completed")
             
@@ -1076,6 +1096,51 @@ def get_all_images():
         })
     
     return images
+
+# Add a new route for sleeve analysis of existing images
+@app.route("/analyze_sleeve/<filename>", methods=["POST"])
+def analyze_image_sleeve(filename):
+    """
+    Analyze sleeve length for an image and update metadata.
+    This will determine if an item has full, half, or no sleeves.
+    """
+    # Secure the filename
+    secure_name = secure_filename(filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_name)
+    
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+    
+    try:
+        # Get existing metadata
+        labels = load_labels()
+        metadata = labels.get(secure_name, {})
+        
+        # Run sleeve analysis
+        sleeve_info = analyze_sleeve(file_path, metadata)
+        
+        # Only update if this isn't bottom wear
+        if not sleeve_info.get('is_bottom_wear', False):
+            # Update labels with the sleeve information
+            if secure_name in labels:
+                labels[secure_name]['hand'] = sleeve_info['sleeve_display']
+                save_labels(labels)
+                
+            return jsonify({
+                "filename": filename,
+                "sleeve_analysis": sleeve_info,
+                "updated": True
+            })
+        else:
+            return jsonify({
+                "filename": filename,
+                "sleeve_analysis": sleeve_info,
+                "updated": False,
+                "message": "Sleeve analysis not applicable for bottom wear"
+            })
+    except Exception as e:
+        print(f"Error analyzing sleeve in {filename}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.errorhandler(404)
 def page_not_found(e):

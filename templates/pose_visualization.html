@@ -1689,5 +1689,39 @@
       }
     });
   </script>
+
+  <!-- Item details panel -->
+  <div class="item-details-panel">
+    <h4>Item Details</h4>
+    <ul class="list-group">
+        <li class="list-group-item">
+            <strong>Label:</strong> <span id="selected-item-label"></span>
+        </li>
+        <li class="list-group-item">
+            <strong>Type:</strong> <span id="selected-item-type"></span>
+        </li>
+        <!-- Make sure pattern is displayed -->
+        <li class="list-group-item">
+            <strong>Pattern:</strong> <span id="selected-item-pattern"></span>
+        </li>
+        <!-- Make sure sleeve is displayed -->
+        <li class="list-group-item">
+            <strong>Sleeve:</strong> <span id="selected-item-sleeve"></span>
+        </li>
+    </ul>
+  </div>
+
+  <script>
+    // Update the function that populates item details
+    function updateItemDetails(item) {
+        document.getElementById('selected-item-label').textContent = item.label;
+        document.getElementById('selected-item-type').textContent = item.wearable;
+        // Add pattern information
+        document.getElementById('selected-item-pattern').textContent = item.pattern || 'Unknown';
+        // Add sleeve information
+        document.getElementById('selected-item-sleeve').textContent = item.hand || 'Unknown';
+        // Other existing fields
+    }
+  </script>
 </body>
 </html>
