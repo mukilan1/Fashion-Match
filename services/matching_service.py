@@ -16,52 +16,45 @@ except Exception as e:
     print(f"Error initializing SentenceTransformer: {str(e)}")
     SBERT_MODEL = None
 
-def generate_match_reason(new_item, candidate, score):
-    """
-    Generate a reason why two clothing items match well.
-    With robust fallback when Ollama is unavailable.
-    """
-    prompt = (
-        f"Why do these match? New: {new_item['label']}, {new_item['costume']}, {new_item['pattern']}, "
-        f"{new_item['color']}. Candidate: {candidate['label']}, {candidate['costume']}, {candidate['pattern']}, "
-        f"{candidate['color']}. Score: {score:.2f}. Answer in less than 2 lines."
-    )
+def generate_match_reason(new_item, match_item, similarity_score):
+    """Generate a concise explanation of why two clothing items match well together"""
+    reasons = []
     
-    try:
-        # Try to use Ollama for dynamic content generation
-        response = ollama.chat(model=OLLAMA_MODEL_NAME, messages=[{'role': 'user', 'content': prompt}])
-        result_text = response.get('message', {}).get('content', "").strip()
-        
-        # Clean up the response: remove <think> tags and other unwanted content
-        cleaned_text = re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL).strip()
-        
-        # If the result is empty or too short after cleaning, use a default message
-        if not cleaned_text or len(cleaned_text) < 10:
-            raise ValueError("Generated text too short")
-            
-        # Return only the first line
-        return cleaned_text.split("\n")[0]
-        
-    except Exception as e:
-        print(f"Ollama match reason generation failed: {str(e)}")
-        
-        # Fallback: Generate a simple reason based on available attributes
-        color_match = new_item['color'] == candidate['color'] and new_item['color'] != "unknown" 
-        pattern_match = new_item['pattern'] == candidate['pattern'] and new_item['pattern'] != "unknown"
-        style_match = new_item['costume'] == candidate['costume'] and new_item['costume'] != "unknown"
-        
-        # Check specific attributes that matched
-        if color_match and pattern_match:
-            return f"Both items feature similar {new_item['color']} color and {new_item['pattern']} pattern (match score: {score:.2f})"
-        elif color_match:
-            return f"These items complement each other with matching {new_item['color']} tones (match score: {score:.2f})"
-        elif pattern_match:
-            return f"The matching {new_item['pattern']} patterns create a cohesive look (match score: {score:.2f})"
-        elif style_match:
-            return f"Both pieces work well for {new_item['costume']} style outfits (match score: {score:.2f})"
-        else:
-            # Generic fallback with score
-            return f"These items complement each other based on overall style compatibility (match score: {score:.2f})"
+    # Check color compatibility
+    if new_item['color'] == match_item['color']:
+        reasons.append(f"matching {new_item['color']} color")
+    else:
+        reasons.append(f"complementary {new_item['color']} and {match_item['color']} colors")
+    
+    # Check pattern compatibility
+    if new_item['pattern'] == match_item['pattern']:
+        if new_item['pattern'] != "unknown" and new_item['pattern'] != "plain":
+            reasons.append(f"coordinated {new_item['pattern']} patterns")
+    
+    # Check style consistency
+    if new_item['costume'] == match_item['costume'] and new_item['costume'] != "unknown":
+        reasons.append(f"consistent {new_item['costume']} style")
+    
+    # Check gender appropriateness
+    if new_item['sex'] == match_item['sex'] and new_item['sex'] != "unknown":
+        reasons.append(f"suitable for {new_item['sex']}")
+    
+    # Create final reason text based on similarity score
+    if similarity_score > 90:
+        quality = "perfect"
+    elif similarity_score > 75:
+        quality = "excellent"
+    elif similarity_score > 60:
+        quality = "good"
+    else:
+        quality = "decent"
+    
+    # Combine all reasons into a single, concise line
+    if reasons:
+        joined_reasons = ", ".join(reasons[:2])  # Limit to top 2 reasons for brevity
+        return f"A {quality} match with {joined_reasons}."
+    else:
+        return f"A {quality} match based on overall compatibility."
 
 def generate_detailed_match_reason(top_item, bottom_item, score, details):
     """
@@ -134,6 +127,9 @@ def find_best_match(new_item, stored_items):
     gender = new_item.get("sex", "unknown")
     label = new_item.get("label", "unknown")
     
+    # Debug print item info
+    print(f"Finding match for: {label} ({wearable_position}), color: {primary_color}, pattern: {pattern}")
+    
     # Determine what type of item we need to match with
     target_wearable_type = "bottom wearable" if wearable_position == "top wearable" else "top wearable"
     print(f"Looking for {target_wearable_type} to match with {wearable_position}")
@@ -144,8 +140,13 @@ def find_best_match(new_item, stored_items):
     # Use global model if available, otherwise create a temporary one
     if SBERT_MODEL is None:
         print("Warning: Using one-time SentenceTransformer model - this may cause performance issues")
-        temp_model = SentenceTransformer(SBERT_MODEL_NAME)
-        new_embedding = temp_model.encode(new_text, convert_to_tensor=True)
+        try:
+            temp_model = SentenceTransformer(SBERT_MODEL_NAME)
+            new_embedding = temp_model.encode(new_text, convert_to_tensor=True)
+        except Exception as e:
+            print(f"Error creating temporary model: {e}")
+            # Fallback to simple matching if model fails
+            return fallback_match(new_item, stored_items, target_wearable_type)
     else:
         new_embedding = SBERT_MODEL.encode(new_text, convert_to_tensor=True)
     
@@ -161,6 +162,8 @@ def find_best_match(new_item, stored_items):
             
         cand_text = f"{data.get('label','')} {data.get('wearable','')} {data.get('costume','')} {data.get('pattern','')} {data.get('color','')} {data.get('sex','')}"
         candidates.append((filename, cand_text, data))
+    
+    print(f"Found {len(candidates)} potential matching candidates")
     
     if not candidates:
         return None, f"No {target_wearable_type} items found to match with your {wearable_position}"
@@ -234,17 +237,62 @@ def find_best_match(new_item, stored_items):
         if pattern_bonus > 0:
             match_details["explanation"].append(f"{pattern} pairs nicely with {cand_pattern}")
         
+        print(f"Candidate: {filename}, Score: {total_score}")
+        
         # Track best match with all details
         if total_score > best_score:
             best_score = total_score
             best_candidate = {
                 "filename": filename,
                 "data": data,
-                "score": best_score,
+                "score": total_score * 100,  # Convert to percentage
                 "match_details": match_details
             }
     
-    return best_candidate, None
+    if best_candidate:
+        print(f"Best match found: {best_candidate['filename']} with score {best_candidate['score']}")
+        return best_candidate, None
+    else:
+        return None, "No suitable match found for your item"
+
+# Add a simple fallback matching function when models fail
+def fallback_match(new_item, stored_items, target_wearable_type):
+    """Simple fallback matching when ML models fail"""
+    print("Using fallback matching logic")
+    candidates = []
+    
+    for filename, data in stored_items.items():
+        if filename == new_item.get("filename"):  # Skip matching with self
+            continue
+            
+        # Only consider items of the complementary wearable type
+        cand_wearable = data.get("wearable", "").lower()
+        if cand_wearable != target_wearable_type:
+            continue
+            
+        # Simple scoring - match color, pattern, etc.
+        score = 0
+        if data.get("color") == new_item.get("color"):
+            score += 40
+        if data.get("costume") == new_item.get("costume"):
+            score += 20
+        if data.get("sex") == new_item.get("sex") or data.get("sex") == "unisex":
+            score += 10
+            
+        candidates.append({
+            "filename": filename,
+            "data": data,
+            "score": score,
+            "match_details": {"explanation": ["Simple matching used due to model failure"]}
+        })
+    
+    # Sort by score and take best
+    candidates.sort(key=lambda x: x["score"], reverse=True)
+    
+    if candidates:
+        return candidates[0], None
+    else:
+        return None, f"No {target_wearable_type} items found to match with your item"
 
 def auto_match(labels):
     """

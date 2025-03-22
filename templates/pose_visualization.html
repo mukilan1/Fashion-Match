@@ -1704,10 +1704,6 @@
         <li class="list-group-item">
             <strong>Pattern:</strong> <span id="selected-item-pattern"></span>
         </li>
-        <!-- Make sure sleeve is displayed -->
-        <li class="list-group-item">
-            <strong>Sleeve:</strong> <span id="selected-item-sleeve"></span>
-        </li>
     </ul>
   </div>
 
@@ -1718,8 +1714,6 @@
         document.getElementById('selected-item-type').textContent = item.wearable;
         // Add pattern information
         document.getElementById('selected-item-pattern').textContent = item.pattern || 'Unknown';
-        // Add sleeve information
-        document.getElementById('selected-item-sleeve').textContent = item.hand || 'Unknown';
         // Other existing fields
     }
   </script>

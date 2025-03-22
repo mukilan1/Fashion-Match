@@ -29,15 +29,35 @@ def create_app():
     
     # Configure app
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max size
     
     # Show initialization progress
     show_progress("Starting server", 25, "Initializing routes")
     
-    # Register routes
-    register_main_routes(app)
-    register_match_routes(app)
-    register_analysis_routes(app)
-    register_media_routes(app)
+    # Register routes - ensure these are working
+    try:
+        register_main_routes(app)
+        print("✓ Main routes registered")
+        
+        register_match_routes(app)
+        print("✓ Match routes registered")
+        
+        register_analysis_routes(app)
+        print("✓ Analysis routes registered")
+        
+        register_media_routes(app)
+        print("✓ Media routes registered")
+    except Exception as e:
+        print(f"ERROR registering routes: {str(e)}")
+        raise
+    
+    # Add CORS headers to all routes
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
     
     # Add template context processor for common URLs
     @app.context_processor
