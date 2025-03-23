@@ -777,12 +777,12 @@
   </div>
 
   <div class="page-container">
-    <!-- Navigation Bar -->
+    <!-- Navigation Bar - FIXED -->
     <div class="nav-bar">
       <div class="nav-links">
-        <a href="{{ url_home }}"><i class="fas fa-home"></i> Home</a>
+        <a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Home</a>
         <a href="{{ url_for('match_page') }}"><i class="fas fa-tshirt"></i> Clothing Match</a>
-        <a href="{{ url_pose_rigging }}" class="active"><i class="fas fa-user-alt"></i> Motion Studio</a>
+        <a href="{{ url_for('pose_rigging') }}" class="active"><i class="fas fa-user-alt"></i> Motion Studio</a>
       </div>
     </div>
     

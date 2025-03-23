@@ -164,6 +164,26 @@ def download_image():
         logger.error(f"Error downloading image: {str(e)}")
         return jsonify({"error": f"Failed to download: {str(e)}"}), 500
 
+# Ensure there's a named route for the index page
+# Remove the conflicting index route definition
+# @app.route('/')
+# def index():
+#     """Display the main inventory page"""
+#     # Get images from routes/main_routes.py
+#     # This is likely already defined in your main_routes.py file
+#     # We just need to make sure it has the proper name 'index'
+#     return render_template('index.html', images=get_images())
+
+# Remove this helper function as well since it's not needed
+# def get_images():
+#     """Get all images for display"""
+#     try:
+#         from routes.main_routes import get_all_images_for_display
+#         return get_all_images_for_display()
+#     except:
+#         # Fallback if the function isn't available
+#         return []
+
 if __name__ == '__main__':
     print("Fashion application running with full features at: http://127.0.0.1:8080/")
     print("Access pose rigging visualization at: http://127.0.0.1:8080/pose_rigging")

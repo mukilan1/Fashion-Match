@@ -241,7 +241,8 @@
 
     <div class="container">
         <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-4">
-            <a href="/" class="btn btn-primary">
+            <!-- Fix navigation to home page -->
+            <a href="{{ url_for('index') }}" class="btn btn-primary">
                 <i class="fas fa-home"></i> Back to Inventory
             </a>
         </div>
@@ -296,6 +297,14 @@
                         <button class="btn btn-outline-primary" id="saveOutfit">
                             <i class="fas fa-save"></i> Save This Outfit
                         </button>
+                    </div>
+                </div>
+                
+                <!-- Add new section for saved outfits -->
+                <div class="virtual-try-section mt-4" id="savedOutfitsSection">
+                    <h4 class="mb-3"><i class="fas fa-bookmark"></i> Saved Outfits</h4>
+                    <div id="savedOutfitsContainer" class="text-center">
+                        <p class="text-muted">No outfits saved yet</p>
                     </div>
                 </div>
             </div>
@@ -487,9 +496,35 @@
                 bottomsContainer.scrollBy({ left: 200, behavior: 'smooth' });
             });
             
-            // Save outfit button
+            // Track saved outfits
+            let savedOutfits = [];
+            const savedOutfitsContainer = document.getElementById('savedOutfitsContainer');
+            
+            // Save outfit button - modified to show outfits in the page
             document.getElementById('saveOutfit').addEventListener('click', function() {
                 if (selectedTop && selectedBottom) {
+                    // Save the outfit
+                    const outfit = {
+                        top: {
+                            id: selectedTop.id,
+                            label: selectedTop.label,
+                            image: virtualModelTop.querySelector('img').src
+                        },
+                        bottom: {
+                            id: selectedBottom.id,
+                            label: selectedBottom.label,
+                            image: virtualModelBottom.querySelector('img').src
+                        },
+                        timestamp: new Date().toLocaleString()
+                    };
+                    
+                    // Add to saved outfits
+                    savedOutfits.push(outfit);
+                    
+                    // Update the saved outfits display
+                    updateSavedOutfitsDisplay();
+                    
+                    // Show success message
                     alert(`Outfit saved: ${selectedTop.label} with ${selectedBottom.label}`);
                 } else {
                     let message = "Please select ";
@@ -503,6 +538,61 @@
                     alert(message);
                 }
             });
+            
+            // Function to update the saved outfits display
+            function updateSavedOutfitsDisplay() {
+                // Clear the container
+                savedOutfitsContainer.innerHTML = '';
+                
+                if (savedOutfits.length === 0) {
+                    savedOutfitsContainer.innerHTML = '<p class="text-muted">No outfits saved yet</p>';
+                    return;
+                }
+                
+                // Create a row for the outfits
+                const row = document.createElement('div');
+                row.className = 'row row-cols-1 row-cols-md-2 g-3';
+                
+                // Add each saved outfit
+                savedOutfits.forEach((outfit, index) => {
+                    const outfitCard = document.createElement('div');
+                    outfitCard.className = 'col';
+                    outfitCard.innerHTML = `
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Outfit #${index + 1}</span>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removeSavedOutfit(${index})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                            <div class="card-body d-flex">
+                                <div class="text-center me-2" style="width: 50%;">
+                                    <img src="${outfit.top.image}" class="img-fluid mb-2" style="max-height: 100px; object-fit: contain;">
+                                    <p class="mb-0 small">${outfit.top.label}</p>
+                                </div>
+                                <div class="text-center" style="width: 50%;">
+                                    <img src="${outfit.bottom.image}" class="img-fluid mb-2" style="max-height: 100px; object-fit: contain;">
+                                    <p class="mb-0 small">${outfit.bottom.label}</p>
+                                </div>
+                            </div>
+                            <div class="card-footer text-muted small">
+                                Saved: ${outfit.timestamp}
+                            </div>
+                        </div>
+                    `;
+                    row.appendChild(outfitCard);
+                });
+                
+                savedOutfitsContainer.appendChild(row);
+            }
+            
+            // Add global function to remove saved outfits
+            window.removeSavedOutfit = function(index) {
+                if (confirm('Are you sure you want to remove this outfit?')) {
+                    savedOutfits.splice(index, 1);
+                    updateSavedOutfitsDisplay();
+                }
+            };
             
             // Check if we have items and select first ones by default
             if (topItems.length > 0) {
