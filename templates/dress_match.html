@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dress Matcher</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding-bottom: 50px;
+        }
+        .header {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            padding: 40px 0;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .scroll-container {
+            display: flex;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            padding: 10px 0;
+            margin: 0 -10px;
+            scroll-snap-type: x mandatory;
+        }
+        .scroll-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        .scroll-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .scroll-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        .scroll-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .item-card {
+            min-width: 180px;
+            height: 250px;
+            margin: 0 10px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            cursor: pointer;
+            scroll-snap-align: center;
+        }
+        .item-card.selected {
+            transform: translateY(-10px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+            border: 3px solid #4a90e2;
+        }
+        .item-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+        }
+        .item-image {
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background-color: #f8f9fa;
+        }
+        .item-image img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .item-details {
+            padding: 10px;
+            text-align: center;
+        }
+        .item-details h5 {
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .item-details p {
+            margin-bottom: 0;
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .section-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        .scroll-arrows {
+            display: flex;
+            gap: 10px;
+        }
+        .scroll-btn {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .scroll-btn:hover {
+            background: #3a80d2;
+        }
+        .virtual-try-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            padding: 20px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        .virtual-model {
+            position: relative;
+            width: 280px;
+            height: 500px;
+            margin: 0 auto;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .virtual-model-top {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 250px;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .virtual-model-bottom {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 300px;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .virtual-model img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .placeholder-msg {
+            color: #6c757d;
+            font-size: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+        .placeholder-msg i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        .badge-position {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 0.65rem;
+            font-weight: bold;
+            color: white;
+            z-index: 2;
+        }
+        .badge-top {
+            background-color: #4a90e2;
+        }
+        .badge-bottom {
+            background-color: #50b83c;
+        }
+        .empty-state {
+            padding: 30px;
+            text-align: center;
+            color: #6c757d;
+        }
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        .outfit-actions {
+            margin-top: 20px;
+        }
+        .section-container {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .model-bg {
+            background: linear-gradient(to bottom, #e9ecef, #dee2e6);
+            position: absolute;
+            width: 100px;
+            height: 500px;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 0;
+            border-radius: 100px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1><i class="fas fa-tshirt"></i> Dress Matcher</h1>
+            <p class="lead">Mix and match your tops and bottoms</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-4">
+            <a href="/" class="btn btn-primary">
+                <i class="fas fa-home"></i> Back to Inventory
+            </a>
+        </div>
+
+        <!-- Alert for not enough items -->
+        {% if tops|length < 1 or bottoms|length < 1 %}
+        <div class="container mt-4">
+            <div class="alert alert-warning">
+                <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i> Not enough items found!</h4>
+                <p>To use the Dress Matcher, you need at least one top and one bottom item.</p>
+                <hr>
+                <p class="mb-0">
+                    {% if tops|length < 1 %}
+                        <strong>Issue:</strong> No tops found. Please upload clothing items classified as tops (shirts, t-shirts, blouses, etc.)
+                    {% endif %}
+                    {% if bottoms|length < 1 %}
+                        <strong>Issue:</strong> No bottoms found. Please upload clothing items classified as bottoms (pants, skirts, shorts, etc.)
+                    {% endif %}
+                </p>
+                <a href="/" class="btn btn-primary mt-3">Go back to upload clothing items</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="row">
+            <div class="col-lg-5">
+                <!-- Virtual Try-On Section -->
+                <div class="virtual-try-section">
+                    <h4 class="mb-3"><i class="fas fa-user-alt"></i> Virtual Try-On</h4>
+                    <div class="virtual-model">
+                        <!-- Background silhouette -->
+                        <div class="model-bg"></div>
+                        
+                        <!-- Top clothing layer -->
+                        <div class="virtual-model-top" id="virtualModelTop">
+                            <div class="placeholder-msg" id="topPlaceholder">
+                                <i class="fas fa-tshirt"></i>
+                                <p>Scroll through tops<br>and select one</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Bottom clothing layer -->
+                        <div class="virtual-model-bottom" id="virtualModelBottom">
+                            <div class="placeholder-msg" id="bottomPlaceholder">
+                                <i class="fas fa-socks"></i>
+                                <p>Scroll through bottoms<br>and select one</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="outfit-actions mt-3">
+                        <button class="btn btn-outline-primary" id="saveOutfit">
+                            <i class="fas fa-save"></i> Save This Outfit
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <!-- Tops Section -->
+                <div class="section-container">
+                    <div class="section-header">
+                        <h3><i class="fas fa-tshirt"></i> Tops</h3>
+                        <div class="scroll-arrows">
+                            <button class="scroll-btn" id="prevTop"><i class="fas fa-chevron-left"></i></button>
+                            <button class="scroll-btn" id="nextTop"><i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                    <p class="text-muted mb-2">Scroll horizontally to browse tops ({{ tops|length }} items)</p>
+                    
+                    <div class="scroll-container" id="topsContainer">
+                        {% if tops %}
+                            {% for item in tops %}
+                            <div class="item-card" data-id="{{ item.filename }}" data-type="top" data-label="{{ item.label }}">
+                                <span class="badge-position badge-top">TOP</span>
+                                <div class="item-image">
+                                    <img src="/uploads/{{ item.filename }}" alt="{{ item.label }}" onerror="this.onerror=null; this.src='{{ item.filename }}';">
+                                </div>
+                                <div class="item-details">
+                                    <h5>{{ item.label }}</h5>
+                                    <p>{{ item.color }} {{ item.pattern }}</p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="empty-state">
+                                <div class="empty-icon"><i class="fas fa-tshirt"></i></div>
+                                <p>No tops found in your inventory</p>
+                                <a href="/" class="btn btn-sm btn-primary mt-2">Add Items</a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Bottoms Section -->
+                <div class="section-container">
+                    <div class="section-header">
+                        <h3><i class="fas fa-socks"></i> Bottoms</h3>
+                        <div class="scroll-arrows">
+                            <button class="scroll-btn" id="prevBottom"><i class="fas fa-chevron-left"></i></button>
+                            <button class="scroll-btn" id="nextBottom"><i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                    <p class="text-muted mb-2">Scroll horizontally to browse bottoms ({{ bottoms|length }} items)</p>
+                    
+                    <div class="scroll-container" id="bottomsContainer">
+                        {% if bottoms %}
+                            {% for item in bottoms %}
+                            <div class="item-card" data-id="{{ item.filename }}" data-type="bottom" data-label="{{ item.label }}">
+                                <span class="badge-position badge-bottom">BOTTOM</span>
+                                <div class="item-image">
+                                    <img src="/uploads/{{ item.filename }}" alt="{{ item.label }}" onerror="this.onerror=null; this.src='{{ item.filename }}';">
+                                </div>
+                                <div class="item-details">
+                                    <h5>{{ item.label }}</h5>
+                                    <p>{{ item.color }} {{ item.pattern }}</p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="empty-state">
+                                <div class="empty-icon"><i class="fas fa-socks"></i></div>
+                                <p>No bottoms found in your inventory</p>
+                                <a href="/" class="btn btn-sm btn-primary mt-2">Add Items</a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get the containers
+            const topsContainer = document.getElementById('topsContainer');
+            const bottomsContainer = document.getElementById('bottomsContainer');
+            
+            // Get all items
+            const topItems = Array.from(document.querySelectorAll('#topsContainer .item-card'));
+            const bottomItems = Array.from(document.querySelectorAll('#bottomsContainer .item-card'));
+            
+            // Log the number of items found to help with debugging
+            console.log(`Found ${topItems.length} tops and ${bottomItems.length} bottoms`);
+            
+            // Get virtual try-on elements
+            const virtualModelTop = document.getElementById('virtualModelTop');
+            const virtualModelBottom = document.getElementById('virtualModelBottom');
+            const topPlaceholder = document.getElementById('topPlaceholder');
+            const bottomPlaceholder = document.getElementById('bottomPlaceholder');
+            
+            // Track currently selected items
+            let selectedTop = null;
+            let selectedBottom = null;
+            
+            // Add event listeners to tops
+            topItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    // Remove selected class from all tops
+                    topItems.forEach(t => t.classList.remove('selected'));
+                    
+                    // Add selected class to this top
+                    this.classList.add('selected');
+                    
+                    // Get the image source
+                    const imgSrc = this.querySelector('img').src;
+                    
+                    // Update the virtual model
+                    // Remove any existing image
+                    const existingImg = virtualModelTop.querySelector('img');
+                    if (existingImg) {
+                        existingImg.remove();
+                    }
+                    
+                    // Create new image
+                    const newImg = document.createElement('img');
+                    newImg.src = imgSrc;
+                    newImg.alt = this.dataset.label;
+                    
+                    // Hide placeholder and add image
+                    topPlaceholder.style.display = 'none';
+                    virtualModelTop.appendChild(newImg);
+                    
+                    // Update selected top
+                    selectedTop = {
+                        id: this.dataset.id,
+                        label: this.dataset.label
+                    };
+                });
+            });
+            
+            // Add event listeners to bottoms
+            bottomItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    // Remove selected class from all bottoms
+                    bottomItems.forEach(b => b.classList.remove('selected'));
+                    
+                    // Add selected class to this bottom
+                    this.classList.add('selected');
+                    
+                    // Get the image source
+                    const imgSrc = this.querySelector('img').src;
+                    
+                    // Update the virtual model
+                    // Remove any existing image
+                    const existingImg = virtualModelBottom.querySelector('img');
+                    if (existingImg) {
+                        existingImg.remove();
+                    }
+                    
+                    // Create new image
+                    const newImg = document.createElement('img');
+                    newImg.src = imgSrc;
+                    newImg.alt = this.dataset.label;
+                    
+                    // Hide placeholder and add image
+                    bottomPlaceholder.style.display = 'none';
+                    virtualModelBottom.appendChild(newImg);
+                    
+                    // Update selected bottom
+                    selectedBottom = {
+                        id: this.dataset.id,
+                        label: this.dataset.label
+                    };
+                });
+            });
+            
+            // Horizontal scrolling controls for tops
+            document.getElementById('prevTop').addEventListener('click', function() {
+                topsContainer.scrollBy({ left: -200, behavior: 'smooth' });
+            });
+            
+            document.getElementById('nextTop').addEventListener('click', function() {
+                topsContainer.scrollBy({ left: 200, behavior: 'smooth' });
+            });
+            
+            // Horizontal scrolling controls for bottoms
+            document.getElementById('prevBottom').addEventListener('click', function() {
+                bottomsContainer.scrollBy({ left: -200, behavior: 'smooth' });
+            });
+            
+            document.getElementById('nextBottom').addEventListener('click', function() {
+                bottomsContainer.scrollBy({ left: 200, behavior: 'smooth' });
+            });
+            
+            // Save outfit button
+            document.getElementById('saveOutfit').addEventListener('click', function() {
+                if (selectedTop && selectedBottom) {
+                    alert(`Outfit saved: ${selectedTop.label} with ${selectedBottom.label}`);
+                } else {
+                    let message = "Please select ";
+                    if (!selectedTop && !selectedBottom) {
+                        message += "a top and a bottom";
+                    } else if (!selectedTop) {
+                        message += "a top";
+                    } else {
+                        message += "a bottom";
+                    }
+                    alert(message);
+                }
+            });
+            
+            // Check if we have items and select first ones by default
+            if (topItems.length > 0) {
+                topItems[0].click();
+            }
+            
+            if (bottomItems.length > 0) {
+                bottomItems[0].click();
+            }
+            
+            // Add keyboard navigation
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'ArrowLeft') {
+                    // Navigate left in the appropriate container
+                    if (document.activeElement.closest('#topsContainer')) {
+                        document.getElementById('prevTop').click();
+                    } else if (document.activeElement.closest('#bottomsContainer')) {
+                        document.getElementById('prevBottom').click();
+                    }
+                } else if (e.key === 'ArrowRight') {
+                    // Navigate right in the appropriate container
+                    if (document.activeElement.closest('#topsContainer')) {
+                        document.getElementById('nextTop').click();
+                    } else if (document.activeElement.closest('#bottomsContainer')) {
+                        document.getElementById('nextBottom').click();
+                    }
+                }
+            });
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

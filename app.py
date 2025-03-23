@@ -32,6 +32,7 @@ from services.dress_search import search_dresses
 
 # Import utilities
 from utils.progress import show_progress
+from utils.image_data import get_all_images, classify_wearable, is_top_wearable, is_bottom_wearable
 
 def create_app():
     """Create and configure the Flask app"""
@@ -110,6 +111,27 @@ def dress_search():
     except Exception as e:
         logger.error(f"Error in dress search: {str(e)}")
         return jsonify({"error": "An unexpected error occurred", "results": []})
+
+@app.route('/dress_match')
+def dress_match():
+    """Display dress matching page with tops and bottoms"""
+    try:
+        # Get all images from the existing labels.json
+        all_images = get_all_images()
+        
+        # Log how many items were found
+        logger.info(f"Found {len(all_images)} clothing items in total")
+        
+        # Filter tops and bottoms using the wearable field pattern from labels.json
+        tops = [item for item in all_images if is_top_wearable(item.get('wearable', ''))]
+        bottoms = [item for item in all_images if is_bottom_wearable(item.get('wearable', ''))]
+        
+        logger.info(f"Classified {len(tops)} tops and {len(bottoms)} bottoms for dress matcher")
+        
+        return render_template('dress_match.html', tops=tops, bottoms=bottoms)
+    except Exception as e:
+        logger.error(f"Error in dress_match route: {str(e)}")
+        return render_template('error.html', error="Failed to load clothing data", status_code=500)
 
 @app.route('/download-image')
 def download_image():

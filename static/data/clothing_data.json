@@ -1,0 +1,22 @@
+[
+  {
+    "filename": "example_top1.jpg",
+    "label": "White T-Shirt",
+    "wearable": "Top",
+    "costume": "No",
+    "sex": "Unisex",
+    "color": "#FFFFFF",
+    "pattern": "Solid",
+    "is_valid": true
+  },
+  {
+    "filename": "example_bottom1.jpg",
+    "label": "Blue Jeans",
+    "wearable": "Bottom",
+    "costume": "No",
+    "sex": "Unisex",
+    "color": "#003366",
+    "pattern": "Solid",
+    "is_valid": true
+  }
+]
