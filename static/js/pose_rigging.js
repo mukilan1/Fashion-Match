@@ -71,6 +71,110 @@ function initializePose() {
   return pose;
 }
 
+// Add this function to apply the color legend to MediaPipe visualization
+function drawConnectors(landmarks, ctx, width, height) {
+  if (!landmarks) return;
+  
+  // Define color scheme based on the color legend
+  const colorScheme = {
+    rightArm: '#3498db',   // Blue
+    leftArm: '#2ecc71',    // Green
+    rightLeg: '#e74c3c',   // Red
+    leftLeg: '#9b59b6',    // Purple
+    torso: '#1abc9c',      // Teal
+    face: '#f1c40f'        // Yellow
+  };
+  
+  // Set line styles
+  ctx.lineWidth = 5;
+  
+  // Define connections with their body part regions
+  const connections = [
+    // Face connections
+    { start: 0, end: 1, color: colorScheme.face },
+    { start: 1, end: 2, color: colorScheme.face },
+    { start: 2, end: 3, color: colorScheme.face },
+    { start: 3, end: 7, color: colorScheme.face },
+    { start: 0, end: 4, color: colorScheme.face },
+    { start: 4, end: 5, color: colorScheme.face },
+    { start: 5, end: 6, color: colorScheme.face },
+    { start: 6, end: 8, color: colorScheme.face },
+    
+    // Torso connections
+    { start: 11, end: 12, color: colorScheme.torso },
+    { start: 12, end: 24, color: colorScheme.torso },
+    { start: 24, end: 23, color: colorScheme.torso },
+    { start: 23, end: 11, color: colorScheme.torso },
+    
+    // Left arm connections
+    { start: 11, end: 13, color: colorScheme.leftArm },
+    { start: 13, end: 15, color: colorScheme.leftArm },
+    { start: 15, end: 17, color: colorScheme.leftArm },
+    { start: 17, end: 19, color: colorScheme.leftArm },
+    { start: 19, end: 21, color: colorScheme.leftArm },
+    { start: 15, end: 19, color: colorScheme.leftArm },
+    
+    // Right arm connections
+    { start: 12, end: 14, color: colorScheme.rightArm },
+    { start: 14, end: 16, color: colorScheme.rightArm },
+    { start: 16, end: 18, color: colorScheme.rightArm },
+    { start: 18, end: 20, color: colorScheme.rightArm },
+    { start: 20, end: 22, color: colorScheme.rightArm },
+    { start: 16, end: 20, color: colorScheme.rightArm },
+    
+    // Left leg connections
+    { start: 23, end: 25, color: colorScheme.leftLeg },
+    { start: 25, end: 27, color: colorScheme.leftLeg },
+    { start: 27, end: 29, color: colorScheme.leftLeg },
+    { start: 29, end: 31, color: colorScheme.leftLeg },
+    
+    // Right leg connections
+    { start: 24, end: 26, color: colorScheme.rightLeg },
+    { start: 26, end: 28, color: colorScheme.rightLeg },
+    { start: 28, end: 30, color: colorScheme.rightLeg },
+    { start: 30, end: 32, color: colorScheme.rightLeg }
+  ];
+
+  // Draw the connections with their respective colors
+  connections.forEach(connection => {
+    const start = landmarks[connection.start];
+    const end = landmarks[connection.end];
+    
+    // Only draw if both points are visible
+    if (start && end && start.visibility > 0.5 && end.visibility > 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(start.x * width, start.y * height);
+      ctx.lineTo(end.x * width, end.y * height);
+      ctx.strokeStyle = connection.color;
+      ctx.stroke();
+    }
+  });
+  
+  // Draw the landmark points
+  landmarks.forEach((landmark, index) => {
+    if (landmark.visibility > 0.5) {
+      let color;
+      
+      // Determine color based on landmark index
+      if (index >= 0 && index <= 10) {
+        color = colorScheme.face;
+      } else if (index >= 11 && index <= 22) {
+        color = (index % 2 === 0) ? colorScheme.rightArm : colorScheme.leftArm;
+      } else if (index >= 23 && index <= 32) {
+        color = (index % 2 === 0) ? colorScheme.rightLeg : colorScheme.leftLeg;
+      } else {
+        color = '#ffffff';  // Default white
+      }
+      
+      // Draw circle
+      ctx.beginPath();
+      ctx.arc(landmark.x * width, landmark.y * height, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+  });
+}
+
 // Process pose detection results - THIS IS THE KEY FUNCTION FOR BOTH SCREENS
 function onResults(results) {
   // Update FPS calculation
@@ -110,31 +214,7 @@ function onResults(results) {
   // Draw pose landmarks on left screen if available
   if (results.poseLandmarks) {
     // Draw connectors (skeleton lines)
-    drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
-      color: (from, to) => {
-        // Different colors for different body parts
-        if ((from === 11 && to === 13) || (from === 13 && to === 15) || 
-            (from === 23 && to === 25) || (from === 25 && to === 27)) {
-          return '#3498db'; // Right arm and leg
-        } else if ((from === 12 && to === 14) || (from === 14 && to === 16) || 
-                  (from === 24 && to === 26) || (from === 26 && to === 28)) {
-          return '#2ecc71'; // Left arm and leg
-        } else if ((from === 11 && to === 23) || (from === 23 && to === 25) || 
-                  (from === 25 && to === 27)) {
-          return '#e74c3c';
-        } else if ((from === 12 && to === 24) || (from === 24 && to === 26) || 
-                  (from === 26 && to === 28)) {
-          return '#9b59b6';
-        } else if ((from === 11 && to === 12) || (from === 12 && to === 24) || 
-                  (from === 24 && to === 23) || (from === 23 && to === 11)) {
-          return '#1abc9c'; // Torso
-        } else if (from <= 10 && to <= 10) {
-          return '#f1c40f'; // Face
-        }
-        return 'white';
-      },
-      lineWidth: 4
-    });
+    drawConnectors(results.poseLandmarks, canvasCtx, canvasElement.width, canvasElement.height);
     
     // Draw the landmark points
     drawLandmarks(canvasCtx, results.poseLandmarks, {

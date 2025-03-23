@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fashion Advisor | AI Chatbot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/chatbot_animations.css">
+    <script src="/static/js/chatbot_formatter.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding-bottom: 50px;
+        }
+        .header {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            padding: 40px 0;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+        .chat-header {
+            background: linear-gradient(135deg, #4a90e2 0%, #2575fc 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+        }
+        .chat-header h3 {
+            margin: 0;
+            font-weight: 600;
+        }
+        .chat-header .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+        .chat-header .avatar i {
+            color: #4a90e2;
+            font-size: 1.5rem;
+        }
+        .chat-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .message {
+            margin-bottom: 15px;
+            max-width: 80%;
+            padding: 12px 15px;
+            border-radius: 18px;
+            position: relative;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .user-message {
+            background-color: #e9f0ff;
+            color: #333;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+        .bot-message {
+            background: #f1f1f1;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+        .thinking {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            background: #f1f1f1;
+            border-radius: 18px;
+            border-bottom-left-radius: 5px;
+            align-self: flex-start;
+            color: #666;
+        }
+        .dot {
+            height: 8px;
+            width: 8px;
+            background-color: #999;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse {
+            0%, 100% { transform: scale(0.8); opacity: 0.6; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+        .chat-footer {
+            padding: 15px;
+            border-top: 1px solid #eee;
+        }
+        .chat-input {
+            display: flex;
+            align-items: center;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 30px;
+            font-size: 1rem;
+            outline: none;
+        }
+        .chat-input input:focus {
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 3px rgba(74,144,226,0.1);
+        }
+        .send-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4a90e2 0%, #2575fc 100%);
+            color: white;
+            border: none;
+            margin-left: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+            box-shadow: 0 4px 10px rgba(37,117,252,0.2);
+        }
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(37,117,252,0.3);
+        }
+        .send-btn:active {
+            transform: translateY(1px);
+        }
+        .send-btn i {
+            font-size: 1.2rem;
+        }
+        .suggestion-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .chip {
+            background-color: #f1f1f1;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chip:hover {
+            background-color: #e4e4e4;
+        }
+        .chip:active {
+            transform: scale(0.95);
+        }
+        .nav-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        .fashion-examples {
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        .fashion-examples h4 {
+            border-bottom: 2px solid #f1f1f1;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+    </style>
+    <style>
+        /* Critical fixes for message alignment */
+        .chat-body {
+            position: relative !important;
+            overflow-y: auto !important;
+        }
+        
+        .message {
+            word-break: break-word !important;
+        }
+        
+        .bot-message::after, .user-message::after {
+            display: none !important; /* Disable speech bubble tails that may cause layout issues */
+        }
+        
+        /* Fix for the container height issue */
+        .chat-container {
+            display: flex !important;
+            flex-direction: column !important;
+            height: 600px !important;
+        }
+        
+        /* Make the header more compact */
+        .chat-header {
+            padding: 10px 15px !important;
+            height: auto !important;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="btn btn-light nav-button"><i class="fas fa-arrow-left"></i> Back to Home</a>
+    
+    <div class="header">
+        <div class="container">
+            <h1><i class="fas fa-comments"></i> Fashion Advisor AI</h1>
+            <p class="lead">Ask our AI assistant about fashion styles, outfit ideas, and clothing advice</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="chat-container">
+            <div class="chat-header">
+                <div class="avatar">
+                    <i class="fas fa-tshirt"></i>
+                </div>
+                <h3>Fashion Assistant</h3>
+                <div class="header-actions" style="margin-left: auto; display: flex; align-items: center;">
+                    <button class="btn btn-sm btn-light" id="clear-chat" title="Clear conversation">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-body scroll-smooth" id="chat-body">
+                <div class="bot-message">
+                    <strong>Welcome to Fashion Advisor</strong>
+                    <p>I can help with outfit ideas, color combinations, and style advice. What fashion question can I assist you with today?</p>
+                </div>
+            </div>
+            
+            <div class="chat-footer">
+                <div class="chat-input">
+                    <input type="text" id="user-input" placeholder="Ask about outfits, colors, or style advice..." autocomplete="off">
+                    <button class="send-btn" id="send-button"><i class="fas fa-paper-plane"></i></button>
+                </div>
+                <div class="suggestion-chips">
+                    <button class="chip">What should I wear with black jeans?</button>
+                    <button class="chip">What colors go well with burgundy?</button>
+                    <button class="chip">How do I layer clothes for winter?</button>
+                    <button class="chip">What's a capsule wardrobe?</button>
+                    <button class="chip">How should I dress for a job interview?</button>
+                    <button class="chip">Are ankle boots still in style?</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="fashion-examples">
+            <h4><i class="fas fa-lightbulb"></i> Things You Can Ask</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <ul>
+                        <li>What colors complement my skin tone?</li>
+                        <li>How to dress for a specific body type?</li>
+                        <li>What's trending this season?</li>
+                        <li>How to accessorize an outfit?</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul>
+                        <li>How to style specific clothing items</li>
+                        <li>Dress code explanations</li>
+                        <li>Outfit ideas for specific occasions</li>
+                        <li>Fashion terminology and concepts</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatBody = document.getElementById('chat-body');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+            const suggestionChips = document.querySelectorAll('.chip');
+            
+            let chatHistory = [];
+            
+            // Function to add a message to the chat (use enhanced version)
+            function addMessage(message, isUser = false) {
+                const messageDiv = window.addFormattedMessage(message, isUser);
+                
+                // Add to chat history
+                chatHistory.push({
+                    role: isUser ? "user" : "assistant",
+                    content: message
+                });
+            }
+            
+            // Function to send a message to the API
+            async function sendMessage(message) {
+                window.showTypingIndicator();
+                
+                try {
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            history: chatHistory
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    // Hide the typing indicator
+                    const typingIndicator = document.getElementById('typing-indicator');
+                    if (typingIndicator) {
+                        typingIndicator.remove();
+                    }
+                    
+                    if (data.error) {
+                        addMessage("I'm having trouble processing your request. Please try again in a moment.");
+                        console.error("API error:", data.error);
+                    } else {
+                        addMessage(data.response);
+                    }
+                } catch (error) {
+                    // Hide typing indicator
+                    const typingIndicator = document.getElementById('typing-indicator');
+                    if (typingIndicator) {
+                        typingIndicator.remove();
+                    }
+                    
+                    addMessage("Sorry, I'm having trouble connecting right now. Please try again later.");
+                    console.error('Error:', error);
+                }
+            }
+            
+            // Handle send button click
+            sendButton.addEventListener('click', () => {
+                const message = userInput.value.trim();
+                if (message) {
+                    addMessage(message, true);
+                    userInput.value = '';
+                    sendMessage(message);
+                }
+            });
+            
+            // Handle Enter key press
+            userInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const message = userInput.value.trim();
+                    if (message) {
+                        addMessage(message, true);
+                        userInput.value = '';
+                        sendMessage(message);
+                    }
+                }
+            });
+            
+            // Handle suggestion chips
+            suggestionChips.forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const message = chip.textContent;
+                    addMessage(message, true);
+                    sendMessage(message);
+                });
+            });
+            
+            // Focus input field on page load
+            userInput.focus();
+        });
+
+        // Add clear chat functionality
+        document.getElementById('clear-chat').addEventListener('click', function() {
+            const chatBody = document.getElementById('chat-body');
+            
+            // Remove all messages except the first one
+            while (chatBody.childNodes.length > 1) {
+                chatBody.removeChild(chatBody.lastChild);
+            }
+            
+            // Reset chat history
+            chatHistory = [];
+            
+            // Add welcome message back
+            const welcomeMessage = chatBody.querySelector('.bot-message');
+            if (!welcomeMessage) {
+                const newWelcome = document.createElement('div');
+                newWelcome.className = 'bot-message';
+                newWelcome.innerHTML = '<strong>Welcome to Fashion Advisor</strong><p>I can help with outfit ideas, color combinations, and style advice. What fashion question can I assist you with today?</p>';
+                chatBody.appendChild(newWelcome);
+            }
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -19,6 +19,7 @@ from routes.main_routes import register_main_routes
 from routes.match_routes import register_match_routes
 from routes.analysis_routes import register_analysis_routes
 from routes.media_routes import register_media_routes
+from routes.chatbot_routes import register_chatbot_routes
 
 # Import utilities
 from utils.progress import show_progress
@@ -47,6 +48,9 @@ def create_app():
         
         register_media_routes(app)
         print("✓ Media routes registered")
+        
+        register_chatbot_routes(app)
+        print("✓ Chatbot routes registered")
     except Exception as e:
         print(f"ERROR registering routes: {str(e)}")
         raise

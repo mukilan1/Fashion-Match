@@ -1,0 +1,249 @@
+###############################################
+# Flask AI Multi-Model Project .gitignore File #
+###############################################
+
+# ==============================================
+# Python & Flask Specific
+# ==============================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Flask stuff
+instance/
+.webassets-cache
+flask_session/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+.venv
+env.bak/
+venv.bak/
+pythonenv*
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==============================================
+# AI & ML Specific
+# ==============================================
+# Model files
+*.model
+*.h5
+*.pb
+*.onnx
+*.pt
+*.pth
+*.pkl
+*.joblib
+*.savedmodel
+*.weights
+*.bin
+exported_models/
+
+# Datasets (consider which ones you want to ignore)
+data/raw/
+data/processed/
+data/interim/
+data/external/
+datasets/large/
+*.csv
+*.parquet
+*.feather
+*.arff
+*.svm
+*.json
+*.jsonl
+# Uncomment if you want to include data files in git
+# !data/processed/.gitkeep
+# !data/raw/.gitkeep
+
+# Experiment tracking & checkpoints
+runs/
+mlruns/
+lightning_logs/
+checkpoints/
+wandb/
+output/
+results/
+logs/
+tensorboard/
+.neptune/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+notebooks/.ipynb_checkpoints/
+jupyter/.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+# ==============================================
+# Hugging Face Transformers & Model Cache
+# ==============================================
+# Model cache and lock files
+models/.locks/
+models/.*
+.cache/huggingface/
+.huggingface/
+.transformers_cache/
+**/models--*/
+**/*.lock
+**/*.bin.index.json
+**/*.safetensors.index.json
+**/.DS_Store
+downloads/
+cached/
+cache/
+
+# Large model files and weights
+**/*.bin
+**/*.safetensors
+**/*.h5
+models/**/pytorch_model.bin
+models/**/model.safetensors
+models/**/tf_model.h5
+models/**/flax_model.msgpack
+models/**/tokenizer.json
+
+# ==============================================
+# Frontend & UI Components (if applicable)
+# ==============================================
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnpm-debug.log
+.npm
+.yarn-integrity
+package-lock.json
+yarn.lock
+
+# Build directories
+/dist
+/build
+/out
+/.next
+/.nuxt
+/static/model
+
+# ==============================================
+# Operating System Files
+# ==============================================
+# MacOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ==============================================
+# IDE & Editors
+# ==============================================
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm and other JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+*.iws
+.idea_modules/
+
+# Other editors
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+*.swp
+*.swo
+*~
+.settings/
+
+# ==============================================
+# Testing & Debugging
+# ==============================================
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+/coverage
+
+# Debug logs
+debug/
+debug.log
+
+# ==============================================
+# Database & Local Storage
+# ==============================================
+*.sqlite
+*.sqlite3
+*.db
+db.sqlite3
+db.sqlite3-journal
+*.sql
+*.log
+local_settings.py
+
+# ==============================================
+# Secrets & Configuration
+# ==============================================
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+configs/secrets.yaml
+secrets.yaml
+secrets.yml
+secrets.json
+config.json
+.credentials/
+
+# ==============================================
+# Temporary Files
+# ==============================================
+.temp/
+.tmp/
+temp/
+tmp/
+.cache/

@@ -3,8 +3,9 @@ pillow
 numpy
 scikit-learn
 sentence-transformers
-transformers
+transformers>=4.28.0
 rembg
 werkzeug
 ollama
 onnxruntime  # Add this dependency for rembg
+torch>=2.0.0
