@@ -9,7 +9,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
-from flask import Flask, g
+from flask import Flask, g, render_template, request, jsonify, redirect, url_for, Response
+import logging
+import requests
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Import configuration
 from config import UPLOAD_FOLDER, DEFAULT_IMG_DIR
@@ -20,6 +26,9 @@ from routes.match_routes import register_match_routes
 from routes.analysis_routes import register_analysis_routes
 from routes.media_routes import register_media_routes
 from routes.chatbot_routes import register_chatbot_routes
+
+# Import dress search service
+from services.dress_search import search_dresses
 
 # Import utilities
 from utils.progress import show_progress
@@ -63,15 +72,14 @@ def create_app():
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
     
-    # Add template context processor for common URLs
-    @app.context_processor
-    def inject_common_urls():
-        """Make common URLs available to all templates"""
-        return {
-            'url_home': '/',
-            'url_match': '/match',
-            'url_pose_rigging': '/pose_rigging',
-        }
+    # Add error handlers
+    @app.errorhandler(404)
+    def page_not_found(e):
+        return render_template('error.html', error="Page not found", status_code=404), 404
+    
+    @app.errorhandler(500)
+    def server_error(e):
+        return render_template('error.html', error="Server error", status_code=500), 500
     
     show_progress("Starting server", 100, "Routes initialized", final=True)
     
@@ -80,7 +88,62 @@ def create_app():
 # Create the Flask app
 app = create_app()
 
+# Define the direct routes here (outside of route modules)
+@app.route('/dress_search', methods=['GET', 'POST'])
+def dress_search():
+    """Handle dress search page and API requests"""
+    try:
+        if request.method == 'POST':
+            prompt = request.form.get('prompt', '').strip()
+            if prompt:
+                # Use the imported search_dresses function
+                logger.info(f"Received dress search request for: {prompt}")
+                results = search_dresses(prompt)
+                logger.info(f"Search complete, found {len(results.get('results', []))} results")
+                return jsonify(results)
+            else:
+                logger.warning("Empty search prompt received")
+                return jsonify({"error": "Search term cannot be empty", "results": []})
+        
+        # For GET requests, show the search page
+        return render_template('dress_search.html')
+    except Exception as e:
+        logger.error(f"Error in dress search: {str(e)}")
+        return jsonify({"error": "An unexpected error occurred", "results": []})
+
+@app.route('/download-image')
+def download_image():
+    """Proxy for downloading images from external sources"""
+    url = request.args.get('url')
+    filename = request.args.get('filename', 'image.jpg')
+    
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+        
+    try:
+        # Request the image from the source
+        response = requests.get(url, stream=True, timeout=10)
+        
+        if response.status_code != 200:
+            return jsonify({"error": f"Failed to fetch image: {response.status_code}"}), 400
+            
+        # Get content type
+        content_type = response.headers.get('Content-Type', 'image/jpeg')
+        
+        # Return the image with appropriate headers for download
+        return Response(
+            response.raw.read(),
+            headers={
+                'Content-Type': content_type,
+                'Content-Disposition': f'attachment; filename="{filename}"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error downloading image: {str(e)}")
+        return jsonify({"error": f"Failed to download: {str(e)}"}), 500
+
 if __name__ == '__main__':
     print("Fashion application running with full features at: http://127.0.0.1:8080/")
     print("Access pose rigging visualization at: http://127.0.0.1:8080/pose_rigging")
+    print("Access dress search tool at: http://127.0.0.1:8080/dress_search")
     app.run(debug=True, threaded=True, port=8080)

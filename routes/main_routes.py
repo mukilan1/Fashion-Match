@@ -347,6 +347,18 @@ def register_main_routes(app):
         else:
             return jsonify({"valid": False, "error": error_message})
 
+    @app.route('/navigation')
+    def navigation():
+        """Return navigation data for frontend"""
+        nav_items = [
+            {"name": "Home", "url": "/", "icon": "home"},
+            {"name": "Match", "url": "/match", "icon": "tshirt"},
+            {"name": "Pose Rigging", "url": "/pose_rigging", "icon": "user"},
+            {"name": "Dress Search", "url": "/dress_search", "icon": "search"},  # Added dress search
+            # ...existing items...
+        ]
+        return jsonify({"navigation": nav_items})
+
     @app.errorhandler(404)
     def main_page_not_found(e):
         return render_template("404.html"), 404

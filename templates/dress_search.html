@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dress Search - Fashion App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding-bottom: 50px;
+        }
+        .header {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            padding: 40px 0;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .search-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+        .search-box {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,.05);
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        .search-form {
+            display: flex;
+            margin: 20px 0;
+            justify-content: center;
+        }
+        .search-input {
+            flex-grow: 1;
+            padding: 12px 15px;
+            font-size: 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 4px 0 0 4px;
+            transition: border-color 0.2s;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+        }
+        .search-btn {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #4a90e2 0%, #2575fc 100%);
+            color: white;
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+        .search-btn:hover {
+            background: linear-gradient(135deg, #3a80d2 0%, #1565ec 100%);
+        }
+        .loading-container {
+            text-align: center;
+            margin: 30px 0;
+            display: none;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-left-color: #4a90e2;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .dress-card {
+            border: none;
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .dress-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        }
+        .dress-image {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            border-bottom: 1px solid #eee;
+            transition: opacity 0.2s;
+        }
+        .dress-image.loading {
+            opacity: 0.6;
+        }
+        .dress-info {
+            padding: 15px;
+        }
+        .dress-source {
+            color: #6c757d;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+        .dress-source i {
+            margin-right: 5px;
+        }
+        .error-message {
+            color: #dc3545;
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8d7da;
+            border-radius: 5px;
+            display: none;
+        }
+        .navigation-bar {
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 10px 0;
+        }
+        .nav-link {
+            color: #495057;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .nav-link:hover {
+            background-color: #f8f9fa;
+            color: #2575fc;
+        }
+        .nav-link.active {
+            color: #2575fc;
+            font-weight: 500;
+        }
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,.05);
+            margin: 30px 0;
+        }
+        .no-results i {
+            font-size: 48px;
+            color: #6c757d;
+            margin-bottom: 15px;
+        }
+        /* Styles for download button */
+        .dress-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .btn-download {
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #50b83c 0%, #3c8e2e 100%);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .btn-download:hover {
+            background: linear-gradient(135deg, #45a535 0%, #347c27 100%);
+            transform: translateY(-2px);
+        }
+        .btn-download i {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1><i class="fas fa-tshirt"></i> Dress Search Tool</h1>
+            <p class="lead">Find clothing and fashion inspiration from across the web</p>
+        </div>
+    </div>
+
+    <div class="navigation-bar mb-4">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="/" class="nav-link">
+                        <i class="fas fa-home"></i> Home
+                    </a>
+                </div>
+                <div class="d-flex">
+                    <a href="/match" class="nav-link">
+                        <i class="fas fa-magic"></i> Match Making
+                    </a>
+                    <a href="/pose_rigging" class="nav-link">
+                        <i class="fas fa-user-alt"></i> Pose Rigging
+                    </a>
+                    <a href="/chatbot" class="nav-link">
+                        <i class="fas fa-comments"></i> Fashion Assistant
+                    </a>
+                    <a href="/dress_search" class="nav-link active">
+                        <i class="fas fa-search"></i> Dress Finder
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <h2 class="mb-3"><i class="fas fa-search"></i> Search for Clothing</h2>
+            <p class="text-muted">Enter any description like "red summer dress", "blue denim jacket", or "formal mens suit"</p>
+            
+            <div class="search-form">
+                <input type="text" id="prompt" class="search-input" placeholder="Enter dress type (e.g., 'wedding dress with lace')">
+                <button onclick="searchDresses()" class="search-btn">
+                    <i class="fas fa-search"></i> Search
+                </button>
+            </div>
+        </div>
+        
+        <div id="loading" class="loading-container">
+            <div class="spinner"></div>
+            <p>Searching the internet for dresses... Please wait.</p>
+        </div>
+        
+        <div id="error" class="error-message"></div>
+        
+        <div id="results-container">
+            <div id="results" class="results-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        // Handle Enter key press in search input
+        document.getElementById('prompt').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                searchDresses();
+            }
+        });
+
+        // Focus search input when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('prompt').focus();
+        });
+
+        function searchDresses() {
+            const prompt = document.getElementById('prompt').value.trim();
+            const errorElement = document.getElementById('error');
+            const loadingElement = document.getElementById('loading');
+            const resultsElement = document.getElementById('results');
+            
+            // Clear previous results and errors
+            errorElement.style.display = 'none';
+            errorElement.textContent = '';
+            resultsElement.innerHTML = '';
+            
+            if (!prompt) {
+                errorElement.textContent = 'Please enter a search term';
+                errorElement.style.display = 'block';
+                return;
+            }
+            
+            // Show loading indicator with better feedback
+            loadingElement.style.display = 'block';
+            loadingElement.innerHTML = `
+                <div class="spinner"></div>
+                <p>Searching for "${prompt}" across multiple sources...</p>
+                <p class="text-muted small">Checking Bing, Google, DuckDuckGo, Unsplash, Pinterest and more</p>
+            `;
+            
+            // Add a more informative timeout message
+            const searchTimeout = setTimeout(() => {
+                loadingElement.innerHTML = `
+                    <div class="spinner"></div>
+                    <p>Search is taking longer than expected...</p>
+                    <p><small>We're searching multiple sources to find the best matches. This may take a few moments for detailed searches.</small></p>
+                `;
+            }, 8000); // 8 seconds is enough
+            
+            // Make search request
+            fetch('/dress_search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `prompt=${encodeURIComponent(prompt)}`
+            })
+            .then(response => {
+                clearTimeout(searchTimeout);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Hide loading
+                loadingElement.style.display = 'none';
+                
+                if (data.error) {
+                    errorElement.textContent = data.error;
+                    errorElement.style.display = 'block';
+                    return;
+                }
+                
+                // Process results
+                if (!data.results || data.results.length === 0) {
+                    // No results found
+                    resultsElement.innerHTML = `
+                        <div class="no-results col-12">
+                            <i class="fas fa-search"></i>
+                            <h3>No results found</h3>
+                            <p>We couldn't find any matches for "${data.query}"</p>
+                            <p>Try using different keywords or check your spelling</p>
+                            <button onclick="tryAlternativeSearch('${data.query}')" class="btn btn-primary mt-3">
+                                <i class="fas fa-sync"></i> Try Alternative Keywords
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Show more detailed results information
+                const resultsCount = document.createElement('div');
+                resultsCount.className = 'alert alert-info mb-4';
+                
+                // Create a more detailed results summary
+                let sourcesInfo = '';
+                const sourcesCounts = {};
+                data.results.forEach(result => {
+                    sourcesCounts[result.source] = (sourcesCounts[result.source] || 0) + 1;
+                });
+                
+                // Format sources for display
+                const sourcesList = Object.entries(sourcesCounts)
+                    .map(([source, count]) => `${source} (${count})`)
+                    .join(', ');
+                    
+                // Show total and source breakdown
+                resultsCount.innerHTML = `
+                    <i class="fas fa-check-circle me-2"></i> 
+                    <strong>${data.results.length}</strong> results found for "${data.query}"
+                    <p class="mb-0 mt-1 small text-muted">Sources: ${sourcesList}</p>
+                `;
+                resultsElement.parentNode.insertBefore(resultsCount, resultsElement);
+                
+                // Create cards for each result
+                let resultCount = 0;
+                const totalResults = data.results.length;
+                
+                data.results.forEach((result, index) => {
+                    // Create card for the dress
+                    const card = document.createElement('div');
+                    card.className = 'dress-card';
+                    card.setAttribute('data-aos', 'fade-up');
+                    card.setAttribute('data-aos-delay', (index * 50).toString());
+                    
+                    // Create image with loading state
+                    const img = document.createElement('img');
+                    img.src = result.url;
+                    img.alt = data.query;
+                    img.className = 'dress-image loading';
+                    img.setAttribute('loading', 'lazy'); // Add native lazy loading
+                    
+                    // Handle image load events
+                    img.onload = function() {
+                        img.classList.remove('loading');
+                        resultCount++;
+                        
+                        // Update results count
+                        updateResultsProgress(resultCount, totalResults);
+                    };
+                    
+                    img.onerror = function() {
+                        card.style.display = 'none'; // Hide card if image fails to load
+                    };
+                    
+                    // Create info section
+                    const info = document.createElement('div');
+                    info.className = 'dress-info';
+                    
+                    const source = document.createElement('div');
+                    source.className = 'dress-source';
+                    source.innerHTML = `<i class="fas fa-globe"></i> Source: ${result.source}`;
+                    
+                    // Create download button section
+                    const actions = document.createElement('div');
+                    actions.className = 'dress-actions';
+                    
+                    // Filename for download
+                    const filename = result.filename || `${data.query.replace(/\s+/g, '_')}_${index + 1}.jpg`;
+                    
+                    // Download button
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'btn-download';
+                    downloadBtn.innerHTML = `<i class="fas fa-download"></i> Download`;
+                    downloadBtn.onclick = function() {
+                        downloadImage(result.url, filename);
+                    };
+                    
+                    // Add elements to info section
+                    info.appendChild(source);
+                    info.appendChild(actions);
+                    actions.appendChild(downloadBtn);
+                    
+                    // Add all elements to card
+                    card.appendChild(img);
+                    card.appendChild(info);
+                    resultsElement.appendChild(card);
+                });
+                
+                // Improved function to update the results counter with more source info
+                function updateResultsProgress(loaded, total) {
+                    const successCount = resultsElement.querySelectorAll('.dress-card:not([style*="display: none"])').length;
+                    
+                    // Count successful images by source
+                    const visibleCards = resultsElement.querySelectorAll('.dress-card:not([style*="display: none"])');
+                    const visibleSources = {};
+                    visibleCards.forEach(card => {
+                        const sourceEl = card.querySelector('.dress-source');
+                        if (sourceEl) {
+                            const sourceText = sourceEl.textContent;
+                            const source = sourceText.replace('Source:', '').trim();
+                            visibleSources[source] = (visibleSources[source] || 0) + 1;
+                        }
+                    });
+                    
+                    // Format visible sources for display
+                    const visibleSourcesList = Object.entries(visibleSources)
+                        .map(([source, count]) => `${source} (${count})`)
+                        .join(', ');
+                    
+                    resultsCount.innerHTML = `
+                        <i class="fas fa-check-circle me-2"></i> 
+                        Showing <strong>${successCount}</strong> out of ${total} results for "${data.query}"
+                        <p class="mb-0 mt-1 small text-muted">
+                            Loading progress: ${loaded}/${total} • 
+                            Visible sources: ${visibleSourcesList}
+                        </p>
+                    `;
+                    
+                    // If we have a very small number of successfully loaded images
+                    if (loaded === total && successCount < 3 && total > 5) {
+                        resultsCount.classList.remove('alert-info');
+                        resultsCount.classList.add('alert-warning');
+                        resultsCount.innerHTML += `
+                            <p class="mb-0 mt-2">
+                                <small>Some images couldn't be displayed due to source restrictions.
+                                <a href="#" onclick="tryAlternativeSearch('${data.query}'); return false;">Try different keywords</a>
+                                or use the download buttons to save the images you can see.</small>
+                            </p>
+                        `;
+                    }
+                }
+            })
+            .catch(error => {
+                clearTimeout(searchTimeout);
+                loadingElement.style.display = 'none';
+                errorElement.textContent = 'Error searching for clothing: ' + error.message;
+                errorElement.style.display = 'block';
+                console.error('Error:', error);
+            });
+        }
+        
+        // Function to try alternative search terms
+        function tryAlternativeSearch(query) {
+            // Modify the query to try alternative keywords
+            let newQuery = query;
+            
+            // Remove specific terms that might be limiting results
+            const termsToReplace = {
+                'formal': 'elegant',
+                'mens': 'men',
+                'male': 'men',
+                'womens': 'women',
+                'female': 'women',
+                'suit': 'suit jacket',
+                'dress': 'gown'
+            };
+            
+            // Replace terms with alternatives
+            for (const [term, replacement] of Object.entries(termsToReplace)) {
+                if (query.toLowerCase().includes(term)) {
+                    newQuery = query.toLowerCase().replace(term, replacement);
+                    break; // Just do one replacement to avoid changing it too much
+                }
+            }
+            
+            // If the query didn't change, add a generic term
+            if (newQuery === query) {
+                if (query.toLowerCase().includes('dress')) {
+                    newQuery = 'fashion ' + query;
+                } else if (query.toLowerCase().includes('suit')) {
+                    newQuery = 'formal ' + query;
+                } else {
+                    newQuery = query + ' fashion';
+                }
+            }
+            
+            // Update the search input and trigger a new search
+            document.getElementById('prompt').value = newQuery;
+            searchDresses();
+        }
+        
+        // Function to download images using server proxy
+        function downloadImage(url, filename) {
+            // Check if we should use the server proxy
+            const useProxy = !url.startsWith(window.location.origin);
+            
+            if (useProxy) {
+                // Use server proxy for cross-origin images
+                const proxyUrl = `/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+                
+                // Create a temporary anchor element
+                const a = document.createElement('a');
+                a.href = proxyUrl;
+                a.download = filename;
+                a.target = '_blank'; // In case download attributes aren't supported
+                
+                // Try to trigger download
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            } else {
+                // For same-origin images, direct download should work
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+            
+            // For cross-origin images, we'll show a helper message
+            setTimeout(() => {
+                // If the download didn't start automatically (common with cross-origin restrictions)
+                const notification = document.createElement('div');
+                notification.style.position = 'fixed';
+                notification.style.bottom = '20px';
+                notification.style.right = '20px';
+                notification.style.padding = '15px 20px';
+                notification.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+                notification.style.color = 'white';
+                notification.style.borderRadius = '5px';
+                notification.style.zIndex = '1000';
+                notification.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                notification.innerHTML = `
+                    <p style="margin: 0 0 10px 0;">If the download didn't start:</p>
+                    <p style="margin: 0;">Right-click on the image and select "Save image as"</p>
+                    <button style="background: none; border: none; color: #4CAF50; margin-top: 10px; cursor: pointer;" 
+                            onclick="this.parentNode.remove()">
+                        Dismiss
+                    </button>
+                `;
+                document.body.appendChild(notification);
+                
+                // Auto-dismiss after 8 seconds
+                setTimeout(() => {
+                    if (document.body.contains(notification)) {
+                        notification.remove();
+                    }
+                }, 8000);
+            }, 1500);
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
