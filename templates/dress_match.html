@@ -496,11 +496,14 @@
                 bottomsContainer.scrollBy({ left: 200, behavior: 'smooth' });
             });
             
-            // Track saved outfits
-            let savedOutfits = [];
+            // Track saved outfits - load from localStorage if available
+            let savedOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
             const savedOutfitsContainer = document.getElementById('savedOutfitsContainer');
             
-            // Save outfit button - modified to show outfits in the page
+            // Update saved outfits display on page load
+            updateSavedOutfitsDisplay();
+            
+            // Save outfit button - modified to show outfits in the page and persist to localStorage
             document.getElementById('saveOutfit').addEventListener('click', function() {
                 if (selectedTop && selectedBottom) {
                     // Save the outfit
@@ -520,6 +523,9 @@
                     
                     // Add to saved outfits
                     savedOutfits.push(outfit);
+                    
+                    // Save to localStorage
+                    localStorage.setItem('savedOutfits', JSON.stringify(savedOutfits));
                     
                     // Update the saved outfits display
                     updateSavedOutfitsDisplay();
@@ -590,6 +596,8 @@
             window.removeSavedOutfit = function(index) {
                 if (confirm('Are you sure you want to remove this outfit?')) {
                     savedOutfits.splice(index, 1);
+                    // Update localStorage after removal
+                    localStorage.setItem('savedOutfits', JSON.stringify(savedOutfits));
                     updateSavedOutfitsDisplay();
                 }
             };
