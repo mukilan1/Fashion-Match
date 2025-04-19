@@ -16,7 +16,7 @@ class WearableClassifier:
                             "capris", "culottes", "briefs"]
         
         self.full_body_items = ["dress", "jumpsuit", "romper", "suit", "overall", "gown", 
-                               "onesie", "bodysuit", "costume"]
+                               "onesie", "bodysuit", "co stume", "court suit"]
     
     def classify(self, label: str) -> str:
         """
@@ -34,7 +34,11 @@ class WearableClassifier:
         # Convert to lowercase for case-insensitive matching
         label_lower = label.lower()
         
-        # Check for full body items first
+        # Special case handling for suits - they should never be bottom wearables
+        if "suit" in label_lower:
+            return "full body"
+            
+        # Check for full body items first (most specific category)
         for item in self.full_body_items:
             if item in label_lower:
                 return "full body"

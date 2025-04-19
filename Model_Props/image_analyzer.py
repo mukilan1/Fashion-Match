@@ -36,6 +36,10 @@ class ClothingImageAnalyzer:
         self.bottom_items = ["pants", "jeans", "shorts", "skirt", "trousers", "leggings", 
                             "joggers", "slacks", "chinos", "bottom", "sweatpants", "tights",
                             "capris", "culottes", "briefs"]
+        
+        # Added full body items list to correctly classify suits and full-body garments
+        self.full_body_items = ["dress", "jumpsuit", "romper", "suit", "overall", "gown", 
+                               "onesie", "bodysuit", "costume", "court suit"]
     
     def _analyze_with_clip(self, image) -> Tuple[str, float]:
         """Use CLIP model for better clothing classification"""
@@ -74,19 +78,32 @@ class ClothingImageAnalyzer:
     
     def classify_wearable_position(self, label: str) -> str:
         """
-        Classify a clothing item as either 'top wearable' or 'bottom wearable' based on its label.
+        Classify a clothing item as 'top wearable', 'bottom wearable', or 'full body' based on its label.
         
         Args:
             label: String containing the clothing description/label
             
         Returns:
-            str: 'top wearable', 'bottom wearable', or 'unknown'
+            str: 'top wearable', 'bottom wearable', 'full body', or 'unknown'
         """
         if not label or label == "unknown":
             return "unknown"
         
         # Convert to lowercase for case-insensitive matching
         label_lower = label.lower()
+        
+        # Special case handling for suits and coats - they should never be bottom wearables
+        if "suit" in label_lower or "coat" in label_lower:
+            # Court suits and formal suits are full body items
+            if "court" in label_lower or "formal" in label_lower:
+                return "full body"
+            # Regular coats are top wearables
+            return "top wearable"
+        
+        # Check for full body items first (most specific category)
+        for item in self.full_body_items:
+            if item in label_lower:
+                return "full body"
         
         # Check for explicit matches with top items
         for item in self.top_items:
@@ -103,7 +120,8 @@ class ClothingImageAnalyzer:
             # Create text for comparison
             text_inputs = self.clip_processor(
                 text=["This is a top garment worn on the upper body", 
-                     "This is a bottom garment worn on the lower body"],
+                     "This is a bottom garment worn on the lower body",
+                     "This is a full body garment covering both upper and lower body"],
                 return_tensors="pt",
                 padding=True
             )
@@ -123,16 +141,20 @@ class ClothingImageAnalyzer:
             # Calculate similarity scores
             top_score = torch.cosine_similarity(label_outputs, outputs[0:1], dim=1).item()
             bottom_score = torch.cosine_similarity(label_outputs, outputs[1:2], dim=1).item()
+            full_body_score = torch.cosine_similarity(label_outputs, outputs[2:3], dim=1).item()
             
             # Return the category with highest similarity
-            if top_score > bottom_score:
+            if full_body_score > top_score and full_body_score > bottom_score:
+                return "full body"
+            elif top_score > bottom_score:
                 return "top wearable"
             else:
                 return "bottom wearable"
                 
         except Exception as e:
             print(f"Error in wearable position classification: {str(e)}")
-            return "unknown"
+            # Default to top wearable if we can't determine
+            return "top wearable"
     
     def analyze_image(self, image_data, question="What type of clothing item is this?") -> Dict[str, Union[str, float]]:
         """
@@ -181,21 +203,40 @@ class ClothingImageAnalyzer:
                 # Add wearable position classification based on the final classification
                 wearable_position = self.classify_wearable_position(final_classification)
                 
+                # Special handling for suits and coats to ensure proper classification
+                if "suit" in final_classification.lower() or "coat" in final_classification.lower():
+                    # Ask a direct follow-up question to confirm if it's a full body suit
+                    follow_up = "Is this a full body suit or just a coat?"
+                    follow_result = self.vqa_pipeline(image, follow_up, top_k=1)
+                    
+                    if follow_result and "full" in follow_result[0]['answer'].lower():
+                        wearable_position = "full body"
+                    elif "coat" in final_classification.lower():
+                        wearable_position = "top wearable"
+                    else:
+                        # Default to top wearable for suits if unsure
+                        wearable_position = "top wearable"
+                
                 # If wearable position is still unknown, use a direct question
                 if wearable_position == "unknown":
-                    direct_question = "Is this a top or bottom wearable garment?"
+                    direct_question = "Is this a top, bottom, or full body garment?"
                     position_result = self.vqa_pipeline(image, direct_question, top_k=1)
                     
-                    if position_result and position_result[0]['answer'] in ["top", "bottom"]:
-                        wearable_position = position_result[0]['answer'] + " wearable"
-                        print(f"Direct position question answered: {wearable_position}")
+                    if position_result:
+                        answer = position_result[0]['answer'].lower()
+                        if "top" in answer:
+                            wearable_position = "top wearable"
+                        elif "bottom" in answer:
+                            wearable_position = "bottom wearable"
+                        elif "full" in answer or "body" in answer:
+                            wearable_position = "full body"
                 
                 # If still unknown, try CLIP with the image directly
                 if wearable_position == "unknown":
                     print("Trying direct image classification for position...")
                     try:
                         text_inputs = self.clip_processor(
-                            text=["This is a top garment", "This is a bottom garment"],
+                            text=["This is a top garment", "This is a bottom garment", "This is a full body garment"],
                             return_tensors="pt",
                             padding=True
                         )
@@ -206,10 +247,12 @@ class ClothingImageAnalyzer:
                             outputs = self.clip_model(**{**image_inputs, **text_inputs})
                             probs = outputs.logits_per_image.softmax(dim=1)[0].numpy()
                             
-                        if probs[0] > probs[1]:
+                        if probs[0] > probs[1] and probs[0] > probs[2]:
                             wearable_position = "top wearable"
-                        else:
+                        elif probs[1] > probs[0] and probs[1] > probs[2]:
                             wearable_position = "bottom wearable"
+                        else:
+                            wearable_position = "full body"
                         
                         print(f"Image-based position classification: {wearable_position} ({max(probs)*100:.1f}%)")
                     except Exception as e:
@@ -219,7 +262,9 @@ class ClothingImageAnalyzer:
                 if wearable_position == "unknown":
                     # Use common words as fallback
                     label_lower = final_classification.lower()
-                    if any(word in label_lower for word in ["shirt", "top", "jacket", "coat", "sweater"]):
+                    if "suit" in label_lower or "coat" in label_lower:
+                        wearable_position = "top wearable"  # Default suits/coats to top wearable
+                    elif any(word in label_lower for word in ["shirt", "top", "jacket", "sweater"]):
                         wearable_position = "top wearable"
                     elif any(word in label_lower for word in ["pants", "jeans", "skirt", "shorts", "trousers"]):
                         wearable_position = "bottom wearable"
