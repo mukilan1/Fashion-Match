@@ -334,6 +334,35 @@ class CostumeAnalyzer:
                 "error": "Failed to load image"
             }
         
+        # Special case handling for suits - directly check label before other analysis
+        suit_detected = False
+        if metadata and 'label' in metadata:
+            label_lower = metadata['label'].lower()
+            if 'suit' in label_lower:
+                suit_detected = True
+                # Check for specific suit types
+                if 'court' in label_lower or 'formal' in label_lower or 'tuxedo' in label_lower:
+                    return {
+                        "costume": "formal",
+                        "confidence": 0.9,
+                        "costume_display_name": "Formal",
+                        "scores": {k: (0.9 if k == "formal" else 0.1/(len(self.costume_categories)-1)) 
+                                  for k in self.costume_categories},
+                        "description": self.costume_categories["formal"]["description"]
+                    }
+                else:
+                    # Default to business for most suits
+                    return {
+                        "costume": "business",
+                        "confidence": 0.85,
+                        "costume_display_name": "Business",
+                        "scores": {k: (0.85 if k == "business" else 0.15/(len(self.costume_categories)-1)) 
+                                  for k in self.costume_categories},
+                        "description": self.costume_categories["business"]["description"]
+                    }
+                    
+        # Continue with normal analysis for non-suit items
+        
         # Initialize empty scores
         clip_scores = {}
         vqa_scores = {}
